@@ -1,0 +1,5 @@
+interface:
+  display_name: "Designer Vibecoding Starter"
+  short_description: "Scaffold a designer-first vibecoding starter."
+  brand_color: "#2F5BFF"
+  default_prompt: "Use $designer-vibecoding-starter to scaffold a new designer vibecoding project here, then ask me the setup questions as clear structured choices."
