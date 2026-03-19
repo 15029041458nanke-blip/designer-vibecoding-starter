@@ -162,6 +162,87 @@ def make_agent_roles() -> str:
 """
 
 
+def make_figma_mcp_setup() -> str:
+    return (
+        "# Figma MCP 接入指南\n\n"
+        "> **定位**：design-driven 路径下，Figma MCP 是设计稿分析与图标下载的核心工具。\n"
+        "> 完成以下配置后，Claude 可以直接读取 Figma 文件结构、下载 SVG 图标到本地。\n\n"
+        "---\n\n"
+        "## 步骤 1：获取 Figma Personal Access Token\n\n"
+        "1. 打开 Figma → 右上角头像 → **Settings**\n"
+        "2. 进入 **Security** 标签页\n"
+        "3. 点击 **Generate new token**（Personal access tokens）\n"
+        "4. 填写名称（如 `claude-mcp`），权限选 **Read-only**（File content）\n"
+        "5. 复制 Token（只显示一次，请保存好）\n\n"
+        "---\n\n"
+        "## 步骤 2：配置 Claude Code MCP（.mcp.json）\n\n"
+        "在项目根目录创建 `.mcp.json`：\n\n"
+        "```json\n"
+        "{\n"
+        '  "mcpServers": {\n'
+        '    "figma": {\n'
+        '      "command": "npx",\n'
+        '      "args": ["-y", "figma-developer-mcp", "--stdio"],\n'
+        '      "env": {\n'
+        '        "FIGMA_API_KEY": "YOUR_FIGMA_TOKEN_HERE"\n'
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}\n"
+        "```\n\n"
+        "替换 `YOUR_FIGMA_TOKEN_HERE` 为步骤 1 中的 Token。\n\n"
+        "---\n\n"
+        "## 步骤 3：安装 vite-plugin-svgr（SVG → React 组件）\n\n"
+        "```bash\n"
+        "npm install --save-dev vite-plugin-svgr\n"
+        "```\n\n"
+        "**vite.config.ts**：\n\n"
+        "```ts\n"
+        "import svgr from 'vite-plugin-svgr'\n"
+        "export default defineConfig({\n"
+        "  plugins: [svgr(), react()],\n"
+        "})\n"
+        "```\n\n"
+        "**src/vite-env.d.ts**：\n\n"
+        "```ts\n"
+        "/// <reference types=\"vite/client\" />\n"
+        "/// <reference types=\"vite-plugin-svgr/client\" />\n"
+        "```\n\n"
+        "---\n\n"
+        "## 步骤 4：使用 download_figma_images 下载图标\n\n"
+        "在 Claude 对话中说：\n\n"
+        "> 使用 download_figma_images 下载 Figma 节点 [nodeId] 为 SVG，保存到 src/components/icons/[name].svg\n\n"
+        "**注意事项**：\n"
+        "- `nodeId` 必须是顶层可导出节点（Frame / Component 顶层，非内部子节点）\n"
+        "- 从 Figma URL 获取：`node-id=5023-57260` → nodeId = `5023:57260`\n"
+        "- `fileKey` 从 Figma URL 获取：`figma.com/design/[fileKey]/...`\n\n"
+        "---\n\n"
+        "## 步骤 5：在 React 中使用下载的 SVG\n\n"
+        "```tsx\n"
+        "import FillColorIcon from '@/components/icons/fill-color.svg?react'\n"
+        "<FillColorIcon width={20} height={20} aria-label=\"填充色\" />\n"
+        "```\n\n"
+        "---\n\n"
+        "## 完整图标还原流程\n\n"
+        "```\n"
+        "get_figma_data → 找到图标节点 nodeId（type=IMAGE-SVG）\n"
+        "     ↓\n"
+        "download_figma_images → src/components/icons/[name].svg\n"
+        "     ↓\n"
+        "import Icon from '@/components/icons/[name].svg?react'\n"
+        "     ↓\n"
+        "替换 <IconPlaceholder /> → <Icon width={20} height={20} />\n"
+        "```\n\n"
+        "---\n\n"
+        "## 常见问题\n\n"
+        "| 问题 | 原因 | 解决 |\n"
+        "|------|------|------|\n"
+        "| 404 Not Found | nodeId 是 Component 内部子节点 | 在 Figma 里选顶层 Frame/Component，从 URL 获取 node-id |\n"
+        "| 无权限 | Token 权限不足 | 重新生成 Token，勾选 File content Read |\n"
+        "| SVG 无 currentColor | Figma 导出时颜色被硬编码 | 手动将 fill 值替换为 `currentColor` |\n"
+    )
+
+
 def make_design_role_rules(creation_date: str) -> str:
     return (
         "# Design Role Rules — 设计还原规则手册\n\n"
@@ -170,9 +251,18 @@ def make_design_role_rules(creation_date: str) -> str:
         "> **更新机制**：每次发现新的典型还原问题，立即在对应章节追加案例。\n\n"
         "---\n\n"
         "## §1 图标（Icon）还原规则\n\n"
-        "- Figma `IMAGE-SVG` 节点无法通过 MCP 导出路径数据，统一用 `IconPlaceholder` 占位\n"
-        "- 禁止：用文字替代图标 / 自行绘制语义化图标 / 留空\n"
-        "- IconPlaceholder 规格（项目启动时确认）：容器尺寸 / 内圆直径 / 描边粗细\n\n"
+        "### 优先方案：download_figma_images 直接下载\n\n"
+        "通过 `download_figma_images` MCP 工具下载真实 SVG，配合 `vite-plugin-svgr` 转为 React 组件。\n"
+        "详见 `docs/design/figma-mcp-setup.md` 完整接入指南。\n\n"
+        "```tsx\n"
+        "import FillColorIcon from '@/components/icons/fill-color.svg?react'\n"
+        "<FillColorIcon width={20} height={20} />\n"
+        "```\n\n"
+        "### 兜底方案：IconPlaceholder 临时占位\n\n"
+        "当图标无法下载时（nodeId 不可导出 / Token 未配置），用 `IconPlaceholder` 临时占位，**禁止**：\n"
+        "- 用文字替代图标\n"
+        "- 自行绘制语义化图标\n\n"
+        "IconPlaceholder 规格（项目启动时确认）：容器尺寸 / 内圆直径 / 描边粗细\n\n"
         "### §1 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
         "---\n\n"
         "## §2 Border 还原规则\n\n"
@@ -970,6 +1060,7 @@ def main() -> None:
 
     if args.path_mode == "design-driven":
         write(root / "agent-context/design-role-rules.md", make_design_role_rules(today()))
+        write(root / "docs/design/figma-mcp-setup.md", make_figma_mcp_setup())
 
     write(root / "project-management/active-sprint.md", make_active_sprint(args.project_name))
     write(root / "project-management/backlog.md", make_backlog())

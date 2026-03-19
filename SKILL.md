@@ -40,12 +40,19 @@ python3 scripts/init_designer_vibecoding_project.py \
    - which workflow is active
    - which files to open first
    - which placeholders still need to be filled
-5. If the user wants local/background execution, point them to:
+5. If `design-driven` path was chosen, remind the user of the required Figma MCP setup:
+   - Open `docs/design/figma-mcp-setup.md` for the 5-step guide
+   - Get a Figma Personal Access Token (Settings > Security > Personal access tokens, Read-only, File content scope)
+   - Create `.mcp.json` in the project root and fill in `FIGMA_API_KEY`
+   - Run `npm install --save-dev vite-plugin-svgr` in the frontend project
+   - Update `vite.config.ts`: `import svgr from 'vite-plugin-svgr'` and add `svgr()` to plugins
+   - The scaffold already generated `docs/design/figma-mcp-setup.md` with the complete guide
+6. If the user wants local/background execution, point them to:
    - `npm run workflow:intent`
    - `npm run agent:run`
    - `npm run openclaw:worker`
    - `npm run openclaw:daemon`
-6. If `OpenClaw` is enabled, remind the user of the required git setup before the worker can run:
+7. If `OpenClaw` is enabled, remind the user of the required git setup before the worker can run:
    - `git init` + push to GitHub (the worker does `git pull` on each cycle and `git push` after execution)
    - install `jq` (required by the worker for handoff parsing)
    - configure Git credentials (SSH key or HTTPS Personal Access Token, non-interactive)
@@ -59,6 +66,8 @@ python3 scripts/init_designer_vibecoding_project.py \
 - When asking in plain text, use the wording in `references/template-map.md` instead of improvising.
 
 - Prefer `design-driven` only when the user already has a design source. In design-driven mode, `design-analyst` must be the first role activated before any handoff is created.
+- In `design-driven` mode, the scaffold automatically generates `agent-context/design-role-rules.md` (7-category restoration rule set) and `docs/design/figma-mcp-setup.md` (5-step Figma MCP + vite-plugin-svgr guide). Both files require user action before icon downloads will work.
+- Icon restoration uses a two-layer strategy: (1) **preferred** — use `download_figma_images` MCP tool to download SVG directly from Figma into `src/assets/icons/`, then import with `vite-plugin-svgr`; (2) **fallback** — render `<IconPlaceholder name="..." />` when the node ID is not a top-level exportable node or the token is not configured.
 - Prefer `codex-fullstack-workflow` when the user wants one environment to own the whole loop (Codex drives all roles: PM / architect / engineer / tester / reviewer).
 - Prefer `claude-planner-codex-builder` when the user explicitly wants Claude to manage planning and context (Claude drives: design-analyst / product-strategist / project-manager / architect / reviewer; Codex drives: engineer / tester).
 - Both modes use the same complete role team — the difference is which model drives which roles.

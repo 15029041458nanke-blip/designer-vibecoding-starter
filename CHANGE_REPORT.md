@@ -6,6 +6,56 @@
 
 ---
 
+## Round 6 — 2026-03-20（Claude 执行）
+
+### 本轮目标
+
+在真实项目（vibcoding 思维导图）中验证了 Figma MCP `download_figma_images` 工具的可行性，并配套引入 `vite-plugin-svgr`，形成"图标直接从 Figma 下载 → 转为 React 组件"的完整链路。本轮目标：将这套 Figma MCP 接入方案沉淀进 skill，使所有 design-driven 项目开箱即得接入指南。
+
+### 改动清单
+
+| 文件 | 改动内容 |
+|------|---------|
+| `scripts/init_designer_vibecoding_project.py` | 新增 `make_figma_mcp_setup()` 函数，生成 5 步 Figma MCP 接入指南（Token 获取 → .mcp.json → vite-plugin-svgr 安装 → vite.config.ts 配置 → React 使用示例）；`main()` 中 `design-driven` 路径下自动写入 `docs/design/figma-mcp-setup.md`；`make_design_role_rules()` §1 更新为「优先 download_figma_images + 兜底 IconPlaceholder」双层策略 |
+| `SKILL.md` | Workflow 第 5 步补充：design-driven 路径脚手架完成后提示 Figma MCP 配置步骤；Guidance 补充双层图标策略说明和 design-role-rules.md / figma-mcp-setup.md 的自动生成说明 |
+
+### 技术背景与验证结论
+
+**`download_figma_images` 工具注意事项**（来自真实项目验证）：
+- 必须使用顶层可导出节点 ID（Frame / Component Set 顶层），**不能**用 Component 内部子节点，否则返回 404
+- `fileKey` 需从 Figma URL 实时获取（`figma.com/design/<fileKey>/...`），历史缓存可能失效
+- 工具返回 S3 临时 URL，需立即下载并保存到本地 `src/assets/icons/`
+
+**`vite-plugin-svgr` 接入要点**：
+- 安装：`npm install --save-dev vite-plugin-svgr`
+- `vite.config.ts`：`import svgr from 'vite-plugin-svgr'`，plugins 中加 `svgr()`
+- 类型声明：`src/vite-env.d.ts` 引用 `/// <reference types="vite-plugin-svgr/client" />`
+- 使用：`import MenuIcon from './assets/icons/menu.svg?react'`
+
+**双层图标还原策略**：
+1. 优先：用 `download_figma_images` MCP 工具下载 SVG → `src/assets/icons/` → `import Icon from '*.svg?react'`
+2. 兜底：Figma Token 未配置或 nodeId 为非顶层节点时，使用 `<IconPlaceholder name="..." className="..." />` 保留占位
+
+### 改动原因
+
+- design-driven 路径的图标还原原来没有系统方案，开发者要么手动导出 SVG，要么用 IconPlaceholder 打标记，缺少"一步到位"的指引
+- Figma MCP 已内置 `download_figma_images` 工具，但需要正确的 Token + .mcp.json 配置才能使用，新项目开发者容易遗漏
+- 将接入指南自动生成到 `docs/design/figma-mcp-setup.md` 让 design-analyst 开箱即得，无需查文档
+
+### 风险与影响
+
+- 无能力削减：新增生成物（`figma-mcp-setup.md`）是 Markdown 指南文档，不影响现有生成逻辑
+- `zero-to-one` 路径不受影响，不生成该文件
+- `download_figma_images` 工具依赖 Figma Personal Access Token，用户不配置则自动降级为 IconPlaceholder 兜底，不阻塞开发
+
+### 需要 Codex 复核的点
+
+1. `make_figma_mcp_setup()` 中的 `.mcp.json` 模板格式是否与最新 `figma-developer-mcp` 版本兼容
+2. `vite-plugin-svgr` 的 `?react` 后缀查询是否需要在 `vite.config.ts` 额外配置（当前使用默认配置）
+3. `design-role-rules.md` §1 双层策略是否应增加「何时降级」的判断逻辑说明
+
+---
+
 ## Round 5 — 2026-03-19（Claude 执行）
 
 ### 本轮目标
