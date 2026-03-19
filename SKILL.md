@@ -67,7 +67,15 @@ python3 scripts/init_designer_vibecoding_project.py \
 
 - Prefer `design-driven` only when the user already has a design source. In design-driven mode, `design-analyst` must be the first role activated before any handoff is created.
 - In `design-driven` mode, the scaffold automatically generates `agent-context/design-role-rules.md` (7-category restoration rule set) and `docs/design/figma-mcp-setup.md` (5-step Figma MCP + vite-plugin-svgr guide). Both files require user action before icon downloads will work.
-- Icon restoration uses a two-layer strategy: (1) **preferred** — use `download_figma_images` MCP tool to download SVG directly from Figma into `src/assets/icons/`, then import with `vite-plugin-svgr`; (2) **fallback** — render `<IconPlaceholder name="..." />` when the node ID is not a top-level exportable node or the token is not configured.
+- Icon restoration uses a **three-layer strategy**:
+  1. **Method A (preferred)** — use `download_figma_images` MCP tool to download SVG directly from Figma into `src/assets/icons/`, then import with `vite-plugin-svgr`. Syntax: `export { default as XxxIcon } from '../../assets/icons/[name].svg?react'` (vite-plugin-svgr v4+, not `ReactComponent`).
+  2. **Method B (fallback)** — when `download_figma_images` fails due to path sandbox restrictions (e.g., Desktop directory), run `scripts/download-figma-icons.py --token $FIGMA_TOKEN`. The script calls Figma REST API (`GET /v1/images/{fileKey}?ids=...&format=svg`) and saves SVGs to `src/assets/icons/`. Edit `FILE_KEY` and `ICON_NODES` dict before running.
+  3. **Method C (last resort)** — render `<IconPlaceholder name="..." />` when token is not configured or the node is not downloadable. Never substitute text or draw semantic icons.
+- Key gotchas for icon download (from real project experience):
+  - Figma Images API response keys are raw colon format (`5000:76419`), **not** hyphen format
+  - Component definition nodes return `null` — use the **instance** node ID (found in the component's usage side)
+  - `get_figma_data(depth=3)` on the **componentSetId** is the only reliable way to get all variants — inspecting instances will miss some (e.g., hollow-border, bottom-border variants)
+  - NodeShell (preview component) should output the **same CSS classes** as the real MindmapNode — don't use inline styles that diverge from shared CSS
 - Prefer `codex-fullstack-workflow` when the user wants one environment to own the whole loop (Codex drives all roles: PM / architect / engineer / tester / reviewer).
 - Prefer `claude-planner-codex-builder` when the user explicitly wants Claude to manage planning and context (Claude drives: design-analyst / product-strategist / project-manager / architect / reviewer; Codex drives: engineer / tester).
 - Both modes use the same complete role team — the difference is which model drives which roles.
@@ -85,9 +93,12 @@ The scaffold should leave the user with:
 - `docs/workflows/`
 - `docs/product/`
 - `docs/design/`
+  - `figma-mcp-setup.md` — 5-step Figma MCP guide (Method A) + Method B REST API fallback + gotcha table (design-driven only)
 - `project-management/`
 - `tasks/`
 - `scripts/`
+  - `init_designer_vibecoding_project.py` — scaffold generator
+  - `download-figma-icons.py` — Figma REST API icon batch downloader (Method B; edit `FILE_KEY` and `ICON_NODES` before use)
 - `.agent/`
 - `package.json`
 
@@ -95,3 +106,4 @@ The scaffold should leave the user with:
 
 - `references/template-map.md`: exact behavior for paths, modes, and questions
 - `scripts/init_designer_vibecoding_project.py`: create the scaffold
+- `scripts/download-figma-icons.py`: Figma REST API fallback for icon batch download (Method B)
