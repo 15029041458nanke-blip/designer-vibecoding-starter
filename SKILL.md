@@ -1,77 +1,30 @@
 ---
 name: designer-vibecoding-starter
-description: Initialize a designer-friendly vibecoding project scaffold with workflow files, collaboration modes, handoff/status infrastructure, and optional OpenClaw helpers. Use when starting a new project from scratch and you want Codex to set up the folder structure, choose between `0-1` or `design-driven` delivery, and configure either a multi-model planning/execution workflow or a single-model multi-agent workflow as the default collaboration mode. 当用户说"帮我搭新项目"、"初始化 vibecoding 项目"、"创建协作脚手架"、"新建 vibecoding 项目"时使用。
+description: Initialize a designer-friendly vibecoding project scaffold with workflow files, collaboration modes, handoff/status infrastructure, and optional OpenClaw helpers. Use when starting a new project from scratch and you want Codex to set up the folder structure, choose between `0-1` or `design-driven` delivery, and configure either a multi-model planning/execution workflow or a single-model multi-agent workflow as the default collaboration mode.
 ---
 
 # Designer Vibecoding Starter
 
+## Overview
+
 Ask the minimum setup questions, scaffold the project, and leave the user with a working folder structure that already contains the collaboration rules, templates, and execution entry points.
 
-Read `references/template-map.md` for exact question wording, structured form mapping, and path/mode behavior.
+Read `references/template-map.md` before scaffolding when you need the exact path/mode behavior.
 
 ## Workflow
 
-### Step 1 — Gather setup choices via AskUserQuestion
-
-Use the `AskUserQuestion` tool to ask all four questions **in a single call** (pass them as an array of up to 4 questions). Do not ask in plain text unless the host does not support the tool.
-
-```json
-{
-  "questions": [
-    {
-      "question": "目标目录或项目名称是什么？",
-      "header": "项目位置",
-      "options": [
-        {"label": "填写项目名", "description": "例如 my-app，会在当前目录下创建"},
-        {"label": "填写完整路径", "description": "例如 /Users/you/Desktop/my-project"},
-        {"label": "当前目录", "description": "直接在当前目录初始化（需明确确认）"}
-      ],
-      "multiSelect": false
-    },
-    {
-      "question": "项目是否已有设计稿？",
-      "header": "开发路径",
-      "options": [
-        {"label": "有设计稿", "description": "走 design-driven：生成设计分析、设计约束、Design QA 文件"},
-        {"label": "没有设计稿", "description": "走 zero-to-one：从意图澄清 → PRD → 实现开始"}
-      ],
-      "multiSelect": false
-    },
-    {
-      "question": "默认协作模式选哪个？",
-      "header": "协作模式",
-      "options": [
-        {"label": "多模型协作", "description": "一个模型负责规划/上下文，另一个负责执行（如 Claude + Codex）"},
-        {"label": "单模型多角色", "description": "由一个模型拆成 PM/架构师/工程师/测试/reviewer 完成全链路"}
-      ],
-      "multiSelect": false
-    },
-    {
-      "question": "是否需要 OpenClaw 后台执行？",
-      "header": "OpenClaw",
-      "options": [
-        {"label": "不需要", "description": "只保留本地协作链路（推荐默认）"},
-        {"label": "需要", "description": "生成远程控制/后台执行脚本，任务可后台继续跑"}
-      ],
-      "multiSelect": false
-    }
-  ]
-}
-```
-
-If the user already provided some answers in their initial message, skip those questions and only ask for what's missing.
-
-### Step 2 — Convert answers to parameters
-
-| 用户选择 | 参数 |
-|----------|------|
-| 有设计稿 | `--path-mode design-driven` |
-| 没有设计稿 | `--path-mode zero-to-one` |
-| 多模型协作 | `--workflow claude-planner-codex-builder` |
-| 单模型多角色 | `--workflow codex-fullstack-workflow` |
-| 需要 OpenClaw | `--openclaw` |
-
-### Step 3 — Run scaffold script
+1. Ask these questions with clear options and short explanations:
+   - target directory or project name
+   - whether the project already has a design file
+   - whether default mode should be:
+     - `Multi-model collaboration` (claude-planner-codex-builder): both chains share the same complete role team; Claude leads the planning-side roles (design-analyst / product-strategist / project-manager / architect / reviewer) and Codex leads the execution-side roles (engineer / tester)
+     - `Single-model multi-agent` (codex-fullstack-workflow): the same complete role team, but Codex drives all roles end-to-end in one model loop
+   - whether to include `OpenClaw` as a remote-control / background execution layer (additive layer on top of either mode)
+2. Convert the answers into:
+   - `path_mode`: `zero-to-one` or `design-driven`
+   - `workflow`: `claude-planner-codex-builder` or `codex-fullstack-workflow`
+   - `openclaw`: enabled or disabled
+3. Run:
 
 ```bash
 python3 scripts/init_designer_vibecoding_project.py \
@@ -82,25 +35,54 @@ python3 scripts/init_designer_vibecoding_project.py \
   [--openclaw]
 ```
 
-If target directory is non-empty, ask the user to confirm merge before adding `--merge`.
-
-### Step 4 — Post-scaffold summary
-
-Show the user:
-- Which path was chosen and which workflow is active
-- First 3 files to open: `AGENTS.md` → `agent-context/current-workflow.md` → `project-management/active-sprint.md`
-- Which placeholders still need to be filled (`tasks/todo.md`, `.agent/handoff.json`)
-- Available npm scripts (and OpenClaw scripts if enabled)
+4. After scaffolding, show the user:
+   - which path was chosen
+   - which workflow is active
+   - which files to open first
+   - which placeholders still need to be filled
+5. If the user wants local/background execution, point them to:
+   - `npm run workflow:intent`
+   - `npm run agent:run`
+   - `npm run openclaw:worker`
+   - `npm run openclaw:daemon`
+6. If `OpenClaw` is enabled, remind the user of the required git setup before the worker can run:
+   - `git init` + push to GitHub (the worker does `git pull` on each cycle and `git push` after execution)
+   - install `jq` (required by the worker for handoff parsing)
+   - configure Git credentials (SSH key or HTTPS Personal Access Token, non-interactive)
+   - fill in `scripts/agent_run.sh` (set `CONFIGURED=true` and add the real execution command)
+   - run a dry-run first: `OPENCLAW_DRY_RUN=true npm run openclaw:worker`
+   - the scaffold will print a step-by-step git setup checklist after initialization completes
 
 ## Guidance
 
-- `design-driven` only when the user already has a design source
-- `codex-fullstack-workflow` when the user wants one environment to own the whole loop
-- `claude-planner-codex-builder` when the user explicitly wants Claude to manage planning/context
-- `OpenClaw` only when the user actually wants background/remote execution
-- `agent_run.sh` is a placeholder — remind the user to configure `CONFIGURED=true` and fill `run_task()` before running
+- Prefer asking the setup questions as structured choices when the host supports interactive forms or dialogs.
+- When asking in plain text, use the wording in `references/template-map.md` instead of improvising.
+
+- Prefer `design-driven` only when the user already has a design source. In design-driven mode, `design-analyst` must be the first role activated before any handoff is created.
+- Prefer `codex-fullstack-workflow` when the user wants one environment to own the whole loop (Codex drives all roles: PM / architect / engineer / tester / reviewer).
+- Prefer `claude-planner-codex-builder` when the user explicitly wants Claude to manage planning and context (Claude drives: design-analyst / product-strategist / project-manager / architect / reviewer; Codex drives: engineer / tester).
+- Both modes use the same complete role team — the difference is which model drives which roles.
+- Include `OpenClaw` only when the user actually wants background/remote execution AND is willing to set up a GitHub repo with git credentials. The worker requires `git`, `jq`, a configured remote, and a non-interactive push setup.
+- If the target directory already contains files, scaffold into it only when the user clearly intends to merge; otherwise create a nested project folder.
+
+## Generated Project Shape
+
+The scaffold should leave the user with:
+
+- `AGENTS.md`
+- `agent-context/`
+- `ai-workflows/`
+- `docs/project-entry/`
+- `docs/workflows/`
+- `docs/product/`
+- `docs/design/`
+- `project-management/`
+- `tasks/`
+- `scripts/`
+- `.agent/`
+- `package.json`
 
 ## Resources
 
-- `references/template-map.md`: question wording, structured form mapping, path/mode behavior details
-- `scripts/init_designer_vibecoding_project.py`: scaffold implementation
+- `references/template-map.md`: exact behavior for paths, modes, and questions
+- `scripts/init_designer_vibecoding_project.py`: create the scaffold

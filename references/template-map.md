@@ -17,8 +17,8 @@ Ask only these essentials:
 1. Target directory or project name
 2. Whether the project already has a design file
 3. Which collaboration mode should be default:
-   - `Multi-model collaboration`: use one model to manage planning / context and another model to execute implementation tasks
-   - `Single-model multi-agent`: use one model to split into PM / architect / engineer / tester / reviewer roles and run the whole loop
+   - `Multi-model collaboration` (claude-planner-codex-builder): both modes share the same complete role team; Claude leads planning-side roles (design-analyst / product-strategist / project-manager / architect / reviewer) and Codex leads execution-side roles (engineer / tester)
+   - `Single-model multi-agent` (codex-fullstack-workflow): same complete role team, but one model (Codex) drives all roles end-to-end in one loop
 4. Whether to include `OpenClaw` remote-control / background execution helpers
 
 ## Recommended wording
@@ -37,8 +37,9 @@ Use this exact wording when the host falls back to text questions:
 3. `默认协作模式选哪个？`
    - `多模型协作：一个模型负责规划 / 上下文管理，另一个模型负责执行开发任务`
    - `单模型多子 agent：由一个模型拆成 PM / architect / engineer / tester / reviewer 等角色来完成整条链路`
-   - `如果你已经明确要用 Claude + Codex，可以把它归到“多模型协作”这一项`
-   - `如果你想由单一模型完成全流程，可以选“单模型多子 agent”`
+   - `多模型协作：Claude 驱动规划侧角色（design-analyst / product-strategist / project-manager / architect / reviewer），Codex 驱动执行侧角色（engineer / tester）`
+   - `单模型多角色：Codex 一个模型串联所有角色（PM / architect / engineer / tester / reviewer）完成全流程`
+   - `两种模式都使用完整角色团队，区别只是由哪个模型驱动哪些角色`
 
 4. `是否需要包含 OpenClaw？`
    - `需要：会生成远程控制 / 后台执行脚本，方便你不盯着本地窗口时继续跑任务`
@@ -113,25 +114,39 @@ Make default workflow explicitly include design analysis and design QA.
 Set:
 
 - `agent-context/current-workflow.md` -> `claude-planner-codex-builder`
-- workflow docs should say Claude handles planning/context, Codex handles execution
+- workflow docs must reflect the complete role team split:
+  - Claude leads: `design-analyst` / `product-strategist` / `project-manager` / `architect` / `reviewer`
+  - Codex leads: `engineer` / `tester`
+- for design-driven path: `design-analyst` must be first role before any handoff is generated
+- handoff is the execution contract; all planning-side roles must complete before handoff is written
 
 ### codex-fullstack-workflow
 
 Set:
 
 - `agent-context/current-workflow.md` -> `codex-fullstack-workflow`
-- workflow docs should say Codex owns product/architect/engineer/test/review by default
+- workflow docs must reflect: Codex drives the complete role team end-to-end
+  - Codex sequentially acts as: `product-strategist` / `project-manager` / `architect` / `engineer` / `tester` / `reviewer`
+  - In design-driven path: Codex also acts as `design-analyst` for initial design translation and final Design QA
 
 ### openclaw
 
 When enabled:
 
-- include `scripts/openclaw_worker.sh`
-- include `scripts/openclaw_daemon.sh`
-- include `npm` helper scripts in `package.json`
-- mention Git-based background execution in docs
+- include `scripts/openclaw_worker.sh` (full version with git pull/push, jq parsing, dirty-check, dedup logic, and inline setup comments)
+- include `scripts/openclaw_daemon.sh` (polling loop with configurable interval and max rounds)
+- include `npm` helper scripts in `package.json`: `openclaw:worker` and `openclaw:daemon`
+- after scaffolding, print a step-by-step git setup checklist covering:
+  1. `git init` + push to GitHub remote
+  2. install `jq`
+  3. configure Git credentials (SSH key or HTTPS PAT, non-interactive)
+  4. fill in `scripts/agent_run.sh` (set `CONFIGURED=true` + real command)
+  5. dry-run validation: `OPENCLAW_DRY_RUN=true npm run openclaw:worker`
+  6. normal start: `npm run openclaw:worker` or `npm run openclaw:daemon`
+- the worker itself validates at runtime: git repo present, remote configured, jq installed, handoff valid
 
 When disabled:
 
 - do not create OpenClaw scripts
 - still keep `.agent/handoff.json` and `.agent/status.json`
+- do not print git setup checklist

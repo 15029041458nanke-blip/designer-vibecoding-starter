@@ -332,6 +332,70 @@ Claude 后续的每一轮优化，都应该用下面这几个问题来判断是�
 Claude 下一轮复核时，请重点看这 4 件事：
 
 1. 如何在不牺牲简洁度的前提下，修回 `workflow_intent.sh` 的可用能力
-2. 如何给初始化脚本补上“已有目录保护”
+2. 如何给初始化脚本补上"已有目录保护"
 3. 如何处理 `agent_run.sh` 的占位状态，避免伪完成
 4. 是否应恢复 `agents/openai.yaml`
+
+---
+
+## 8. design-driven 路径：设计还原规则沉淀（Round 5 新增）
+
+### 8.1 背景
+
+在真实的 design-driven 项目（vibcoding 思维导图）中，经过多轮 Figma → 代码还原与质检，我们总结出了一套系统性的设计还原规则，适用于 `design-analyst` → `engineer` → `reviewer` 的完整链路。
+
+这套规则已在项目内落地为 `agent-context/design-role-rules.md`（v1.8），并验证有效。
+
+### 8.2 核心规则分类（共 7 类）
+
+| 类别 | 核心内容 | 典型陷阱 |
+|------|---------|---------|
+| §1 图标规则 | IMAGE-SVG 节点禁止用文字或自绘替代，统一用 `IconPlaceholder`（20px容器+18px圆+1.5px描边） | 凭语义自造图标内容 |
+| §2 Border 规则 | Inside stroke → CSS border-box；含 fill 子元素的结构性容器用 `outline` 不用 `border` | border-box 压缩 fill 子元素内容区 |
+| §3 尺寸规则 | sizing 类型（hug/fixed/fill）必须从 Component Set 直接读取，不能从使用侧推断 | 从父容器使用侧推断 fill/fixed |
+| §4 节点类型识别 | 实现前必须查 Figma 节点 `type` 字段，`TEXT` 才用文字，其余用 IconPlaceholder | 未查 type 凭语义猜 |
+| §5 布局对齐 | Auto Layout：MCP 直接返回 `alignItems`/`justifyContent`；绝对定位：只返回 `locationRelativeToParent {x,y}`，需手动判断居中意图 | 字面翻译绝对定位坐标为 top/left |
+| §6 组件系统 | 变体必须从 Component Set 顶层节点枚举，不能从使用侧实例读取 | 从使用侧实例读取，遗漏变体 |
+| §7 QA 清单 | 逐层走查：图标→尺寸→border→布局→变体→token | 局部验证遗漏系统性问题 |
+
+### 8.3 关键发现：Figma MCP 对齐数据机制
+
+Figma MCP **会**返回对齐属性，但分两类：
+
+- **Auto Layout 子元素**：直接返回 `alignItems` / `justifyContent` / `alignSelf`，可直接映射 CSS flex 属性
+- **绝对定位元素**（`position: absolute`）：只返回 `locationRelativeToParent: {x, y}`，无对齐标签，需手动判断：
+  - 若 `x == (父宽-子宽)/2` 且 `y == (父高-子高)/2` → 居中意图 → `inset: 0 + flex 双轴居中`
+  - 否则 → 真实偏移 → `top/left`（须加父容器 border 宽度修正）
+
+### 8.4 design-driven 项目生成物标准
+
+skill 初始化 `design-driven` 路径时，除原有设计文件外，应额外生成：
+
+```
+agent-context/
+  design-role-rules.md   ← 设计还原规则手册（新增生成物）
+```
+
+该文件包含以下章节的初始框架（空模板），供团队在项目中迭代填充：
+- §1 图标规则
+- §2 Border 规则
+- §3 尺寸规则
+- §4 节点类型识别
+- §5 布局对齐规则（含 MCP 数据机制说明）
+- §6 组件系统规则
+- §7 QA 走查清单
+- §CHANGELOG
+
+### 8.5 还原质量目标
+
+| 阶段 | 目标 |
+|------|------|
+| 第一稿还原 | > 80% 精准还原（基于完整规则手册） |
+| 质检修复 | 平均每轮 QA 发现问题 < 5 个 |
+| 规则迭代 | 每发现新典型问题 → 立即追加规则案例并更新 CHANGELOG |
+
+### 8.6 不可退化约束
+
+- `design-role-rules.md` 不能是纯描述文档，必须包含可执行的走查清单（§7）
+- 规则必须有触发案例支撑（无案例的规则不算有效规则）
+- 新项目初始化时生成的是"空白模板框架"，不是已填充内容——填充由 design-analyst 角色在项目启动时完成
