@@ -118,15 +118,52 @@ B) 我还没有设计稿，从产品想法开始描述
 - 需要状态管理 → 加 **Zustand**（轻量，对设计师友好）
 - 需要后端 API/数据库 → **Next.js + Prisma + SQLite/PostgreSQL**
 
-### Step A-6：设计风格（仅有前端 UI 时询问）
+### Step A-6：设计风格定义（仅有前端 UI 时询问）
 
 ```
-界面风格有倾向吗？
-（例如：极简白底、卡片式、深色系、类 Notion、类 Linear 等）
-不确定的话跳过就好，我会给一个简洁的基础样式。
+界面风格有倾向吗？可以用以下任何方式告诉我：
+
+A) 发几张你喜欢的网站/应用截图（直接拖入对话框）
+B) 发一个你喜欢的网站 URL
+C) 用文字描述（如：极简白底、类 Linear、深色系科技感……）
+D) 不确定 / 跳过 → 我会给一个简洁的基础样式
+
+推荐选 A 或 B，效果最好——我能从参考图中提取完整的设计语言。
 ```
 
-等待回答 → 记录 `design_style`（可为空）
+等待回答 → 根据回答分流：
+
+**分流 A/B：用户提供了参考图或 URL**
+```
+触发 style-foundation Skill（skills/style-foundation/SKILL.md）
+  → Phase 0 判断模式（Mode A: Image Extract）
+  → Phase 1 追问（情感目标、反参考等，逐步追问）
+  → Phase 2 Section-First 三层递进提取
+  → Phase 3 输出风格宪法 → 写入 docs/style-constitution.md
+  → 记录 has_constitution = true
+```
+
+**分流 C：用户给了文字描述**
+```
+判断描述的丰富程度：
+  - 丰富（≥2 个维度，如"深色系 + 类 Linear + 极简"）
+    → 触发 style-foundation Mode B（文字描述推导）
+    → 输出风格宪法 → 写入 docs/style-constitution.md
+    → 记录 has_constitution = true
+  - 简单（单个关键词，如"极简"）
+    → 记录 design_style，不触发 style-foundation
+    → 记录 has_constitution = false
+```
+
+**分流 D：用户跳过**
+```
+记录 design_style = ""，has_constitution = false
+后续 Phase 2B 使用默认基础样式
+```
+
+> **为什么升级**：之前只记录一个 `design_style` 字符串，导致后续生成的设计 Token
+> 是硬编码的通用值，与用户的审美意图脱节。通过集成 style-foundation，
+> 用户提供参考图后能得到一份完整的「风格宪法」，后续所有 UI 实现都以此为准。
 
 ### Step A-7：生成 PRD 草稿 + 用户确认
 
@@ -349,11 +386,32 @@ python3 skills/designer-vibecoding-starter/scripts/init_designer_vibecoding_proj
 
 ### Step 2B-3：生成设计 Token（关键）
 
-**0-1 路径**（无设计稿）：根据 `design_style` 生成基础 token：
+根据 Phase 1A/1B 的结果，分三种情况生成设计 Token：
+
+**情况 1：有风格宪法（`has_constitution = true`）**
+
+从 `docs/style-constitution.md` 的「Token 草案（CSS 变量）」章节直接提取，写入 `src/styles/tokens.css`。
+
+```
+操作步骤：
+1. 读取 docs/style-constitution.md
+2. 找到「Token 草案（CSS 变量）」章节
+3. 将其中的 CSS 变量直接写入 src/styles/tokens.css
+4. 如果宪法中有 Google Fonts 引用，在 index.html 的 <head> 中添加 <link>
+5. 如果宪法中有 Section Storyboard 定义了深色/浅色 section，
+   确保 tokens.css 包含对应的 surface_light / surface_dark 变量
+```
+
+> **铁律**：有 Constitution 时，Token 必须 100% 来自 Constitution，
+> 禁止自行编造颜色值或"优化"Constitution 中的值。
+
+**情况 2：无宪法但有 `design_style` 文字描述**
+
+根据 `design_style` 关键词生成基础 token（保持原有逻辑）：
 ```css
 /* src/styles/tokens.css */
 :root {
-  /* 颜色 */
+  /* 颜色 — 根据 design_style 关键词选择 */
   --color-primary: #[根据风格选择];
   --color-primary-hover: #[...];
   --color-bg: #ffffff;
@@ -385,7 +443,9 @@ python3 skills/designer-vibecoding-starter/scripts/init_designer_vibecoding_proj
 }
 ```
 
-**设计驱动路径**：从 Phase 1B 的设计分析包中提取颜色、间距、圆角值，转化为 CSS custom properties，与设计稿保持一致。
+**情况 3：设计驱动路径**
+
+从 Phase 1B 的设计分析包中提取颜色、间距、圆角值，转化为 CSS custom properties，与设计稿保持一致。
 
 ### Step 2B-4：生成入口文件和路由
 
@@ -696,6 +756,7 @@ Vercel 检测到 push 后自动重新部署，约 1 分钟更新完成。
 
 | 时机 | 触发的 Skill |
 |------|-------------|
+| 0-1 路径用户提供参考图/URL/丰富风格描述 | `style-foundation`（生成风格宪法） |
 | 用户输入 Figma 链接 | `design-analysis` Phase-1 |
 | PRD 确认后实现功能 | `writing-plans` → 子 agent |
 | 每个 Task 完成后 | `two-stage-review` |
@@ -704,6 +765,21 @@ Vercel 检测到 push 后自动重新部署，约 1 分钟更新完成。
 | 代码有 bug | `systematic-debugging` |
 | 架构变更前 | `architecture-check` |
 
+### Constitution 强制读取规则
+
+当项目中存在 `docs/style-constitution.md` 时，以下环节**必须先读取 Constitution**：
+
+| 环节 | 读取内容 | 用途 |
+|------|---------|------|
+| Phase 2B-3 生成设计 Token | Token 草案章节 | 直接提取 CSS 变量 |
+| Phase 2B-5 生成 Page 骨架 | Section Storyboard 章节 | 指导页面布局和视觉节奏 |
+| Phase 3 实现功能（调用 frontend-design） | 完整 Constitution | 作为 frontend-design 的风格约束输入 |
+| Phase 3 Design QA | 设计原则 DO/DON'T | 验证实现是否符合风格宪法 |
+
+**铁律**：有 Constitution 的项目，任何 UI 实现步骤都不得忽略 Constitution。
+如果 frontend-design skill 被触发，必须在 prompt 中包含 Constitution 的核心内容
+（至少包含：Style DNA 一句话 + Section Storyboard 亮点 + Token 草案 + DO/DON'T）。
+
 ---
 
 ## Resources
@@ -711,10 +787,11 @@ Vercel 检测到 push 后自动重新部署，约 1 分钟更新完成。
 - [`references/template-map.md`](references/template-map.md)：问题清单 + 路径分支行为 + Scaffold 文件列表
 - [`scripts/init_designer_vibecoding_project.py`](scripts/init_designer_vibecoding_project.py)：Phase 2A 治理脚手架脚本
 - [`skills/design-analysis/SKILL.md`](../design-analysis/SKILL.md)：设计分析完整流程
+- [`skills/style-foundation/SKILL.md`](../style-foundation/SKILL.md)：风格基石（参考图→风格宪法）
 - [`agent-context/design-role-rules.md`](../../agent-context/design-role-rules.md)：Figma→CSS 还原规则库
 
 ---
 
-_版本：v4.0（2026-03-26）_
-_新增：Phase 2B 初始代码库生成 + Phase 4 部署引导（Vercel/Railway）_
-_覆盖：需求收集 → 代码生成 → 开发迭代 → 上线部署，设计师全生命周期_
+_版本：v4.1（2026-04-01）_
+_变更：Phase 1A Step A-6 集成 style-foundation（参考图→风格宪法）+ Phase 2B-3 Constitution 驱动 Token 生成 + Constitution 强制读取规则_
+_覆盖：需求收集 → 风格定义 → 代码生成 → 开发迭代 → 上线部署，设计师全生命周期_

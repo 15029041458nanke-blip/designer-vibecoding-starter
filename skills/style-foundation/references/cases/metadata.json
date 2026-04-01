@@ -1,0 +1,97 @@
+{
+  "_说明": "文件名 → 元数据的映射。name 会作为案例标题，URL 显示在分析结果中便于溯源。",
+  "04ad3596a27f19e2-akashtyagi-com.webp": {
+    "url": "https://akashtyagi.com",
+    "name": "Akash Tyagi"
+  },
+  "300990be0be356da-www-lovart-ai.webp": {
+    "url": "https://www.lovart.ai",
+    "name": "Lovart.ai"
+  },
+  "33989f6738b84cee-gitbook-com.webp": {
+    "url": "https://gitbook.com",
+    "name": "GitBook"
+  },
+  "3eb7e9e11dade804-www-anthropic-com.webp": {
+    "url": "https://www.anthropic.com",
+    "name": "Anthropic"
+  },
+  "3f10e30dc1221ddc-capacity-so.webp": {
+    "url": "https://capacity.so",
+    "name": "Capacity.so"
+  },
+  "3f8a01ce9b94cd27-bettermistakes-com.webp": {
+    "url": "https://bettermistakes.com",
+    "name": "Better Mistakes"
+  },
+  "5e2398e21113a302-screenshot-desktop.webp": {
+    "name": "Screenshot Desktop 1"
+  },
+  "69a9964dd8f18a87-zerohash-com.webp": {
+    "url": "https://zerohash.com",
+    "name": "Zero Hash"
+  },
+  "6b63bacadd265c28-www-keytail-ai.webp": {
+    "url": "https://www.keytail.ai",
+    "name": "Keytail.ai"
+  },
+  "6c8de17f0e3ffc7f-lumen-nextjs-template-vercel-app.webp": {
+    "url": "https://lumen-nextjs-template.vercel.app",
+    "name": "Lumen Template"
+  },
+  "6f648d60fefbf5b2-pilcrow-no.webp": {
+    "url": "https://pilcrow.no",
+    "name": "Pilcrow"
+  },
+  "7108637486511509-belleduffner-com.webp": {
+    "url": "https://belleduffner.com",
+    "name": "Belle Duffner"
+  },
+  "7c9dea3614b6a957-www-langchain-com.webp": {
+    "url": "https://www.langchain.com",
+    "name": "LangChain"
+  },
+  "8b5d0924abe2e499-elevenlabs-io.webp": {
+    "url": "https://elevenlabs.io",
+    "name": "ElevenLabs"
+  },
+  "8ee68bbb751f4f74-www-callbaba-com.webp": {
+    "url": "https://www.callbaba.com",
+    "name": "Callbaba"
+  },
+  "966f2733b8f161ab-www-tryplayground-com.jpg": {
+    "url": "https://www.tryplayground.com",
+    "name": "Playground"
+  },
+  "96f4f58069dd2251-neon-com.webp": {
+    "url": "https://neon.com",
+    "name": "Neon"
+  },
+  "a0615357f88beedc-supercommon-systems.webp": {
+    "url": "https://supercommon.systems",
+    "name": "Supercommon"
+  },
+  "abcc524af73f5123-obvious-ai.webp": {
+    "url": "https://obvious.ai",
+    "name": "Obviously AI"
+  },
+  "c7209067f01d22dc-joinspread-app.webp": {
+    "url": "https://joinspread.app",
+    "name": "Spread"
+  },
+  "dc3d60eb37168934-linear-app.webp": {
+    "url": "https://linear.app",
+    "name": "Linear"
+  },
+  "e947ef71932c45d4-framer-link.webp": {
+    "url": "https://framer.link",
+    "name": "Framer"
+  },
+  "f761cc5a0d6f345e-www-terminal-x-ai.jpg": {
+    "url": "https://www.terminal-x.ai",
+    "name": "Terminal X"
+  },
+  "fe12f6dec70abd57-screenshot-desktop.webp": {
+    "name": "Screenshot Desktop 2"
+  }
+}
