@@ -6,104 +6,38 @@
 
 ---
 
-## Round 6 — 2026-03-20（Claude 执行）
+## Round 5 — 2026-03-20（Claude 执行）
 
 ### 本轮目标
 
-在真实项目（vibcoding 思维导图）中验证了 Figma MCP `download_figma_images` 工具的可行性，并配套引入 `vite-plugin-svgr`，形成"图标直接从 Figma 下载 → 转为 React 组件"的完整链路。本轮目标：将这套 Figma MCP 接入方案沉淀进 skill，使所有 design-driven 项目开箱即得接入指南。
+新增三大能力，支持多 agent 协同场景下的链路自动验证、模型分工规划和用户引导。
 
 ### 改动清单
 
 | 文件 | 改动内容 |
 |------|---------|
-| `scripts/init_designer_vibecoding_project.py` | 新增 `make_figma_mcp_setup()` 函数，生成 5 步 Figma MCP 接入指南（Token 获取 → .mcp.json → vite-plugin-svgr 安装 → vite.config.ts 配置 → React 使用示例）；`main()` 中 `design-driven` 路径下自动写入 `docs/design/figma-mcp-setup.md`；`make_design_role_rules()` §1 更新为「优先 download_figma_images + 兜底 IconPlaceholder」双层策略 |
-| `SKILL.md` | Workflow 第 5 步补充：design-driven 路径脚手架完成后提示 Figma MCP 配置步骤；Guidance 补充双层图标策略说明和 design-role-rules.md / figma-mcp-setup.md 的自动生成说明 |
-
-### 技术背景与验证结论
-
-**`download_figma_images` 工具注意事项**（来自真实项目验证）：
-- 必须使用顶层可导出节点 ID（Frame / Component Set 顶层），**不能**用 Component 内部子节点，否则返回 404
-- `fileKey` 需从 Figma URL 实时获取（`figma.com/design/<fileKey>/...`），历史缓存可能失效
-- 工具返回 S3 临时 URL，需立即下载并保存到本地 `src/assets/icons/`
-
-**`vite-plugin-svgr` 接入要点**：
-- 安装：`npm install --save-dev vite-plugin-svgr`
-- `vite.config.ts`：`import svgr from 'vite-plugin-svgr'`，plugins 中加 `svgr()`
-- 类型声明：`src/vite-env.d.ts` 引用 `/// <reference types="vite-plugin-svgr/client" />`
-- 使用：`import MenuIcon from './assets/icons/menu.svg?react'`
-
-**双层图标还原策略**：
-1. 优先：用 `download_figma_images` MCP 工具下载 SVG → `src/assets/icons/` → `import Icon from '*.svg?react'`
-2. 兜底：Figma Token 未配置或 nodeId 为非顶层节点时，使用 `<IconPlaceholder name="..." className="..." />` 保留占位
+| `skills/designer-vibecoding-starter/SKILL.md` | 新增 Phase 0（多 Agent 协同链路验证），三步验证流程：CLI 检查 → 认证检查 → hello 测试；Phase 3 加入"模型分工说明"和"成本优化建议"模块 |
+| `skills/designer-vibecoding-starter/WORKING_SPEC.md` | 新增 §1.3（多 Agent 协同场景支持），§2.10（联通验证强制前置），记录各类失败的处理策略 |
+| `agent-context/session-kickoff.md` | 新增"Codex 链路自动联通性验证"章节，规定触发条件（会话开始/用户切换/任务前）和三步验证流程，记录已知中文路径 Bug 说明 |
 
 ### 改动原因
 
-- design-driven 路径的图标还原原来没有系统方案，开发者要么手动导出 SVG，要么用 IconPlaceholder 打标记，缺少"一步到位"的指引
-- Figma MCP 已内置 `download_figma_images` 工具，但需要正确的 Token + .mcp.json 配置才能使用，新项目开发者容易遗漏
-- 将接入指南自动生成到 `docs/design/figma-mcp-setup.md` 让 design-analyst 开箱即得，无需查文档
+1. 用户痛点：每次切换到 claude-planner-codex-builder 链路时，不知道 Codex 是否可用，需要手动调试
+2. 用户需求：多 agent 协同场景下希望能"自动打通"，不希望自己排查认证和网络问题
+3. 成本意识：用户希望充分利用套餐（Claude + ChatGPT Plus），不想浪费配额在重复执行任务上
+4. 链路推广：designer-vibecoding-starter 作为引导工具，必须帮助新用户在初始化时就完成 Codex 配置，不能留到用户遇到问题再去排查
 
 ### 风险与影响
 
-- 无能力削减：新增生成物（`figma-mcp-setup.md`）是 Markdown 指南文档，不影响现有生成逻辑
-- `zero-to-one` 路径不受影响，不生成该文件
-- `download_figma_images` 工具依赖 Figma Personal Access Token，用户不配置则自动降级为 IconPlaceholder 兜底，不阻塞开发
+- Phase 0 验证属于"软检查"：验证失败不阻断 scaffold，用户可选择跳过（但需知情）
+- 认证检查依赖路径 `~/.codex/auth.json`，不同操作系统路径可能不同（当前仅验证 macOS）
+- 中文路径 WebSocket Bug 属于 Codex CLI 上游 BUG，当前方案为"告知用户，不影响使用"
 
 ### 需要 Codex 复核的点
 
-1. `make_figma_mcp_setup()` 中的 `.mcp.json` 模板格式是否与最新 `figma-developer-mcp` 版本兼容
-2. `vite-plugin-svgr` 的 `?react` 后缀查询是否需要在 `vite.config.ts` 额外配置（当前使用默认配置）
-3. `design-role-rules.md` §1 双层策略是否应增加「何时降级」的判断逻辑说明
-
----
-
-## Round 5 — 2026-03-19（Claude 执行）
-
-### 本轮目标
-
-在真实 design-driven 项目（vibcoding 思维导图）的多轮 Figma → 代码还原与质检中，我们总结出了一套完整的设计还原规则体系（v1.8），并验证有效。本轮目标：将这套规则沉淀进 skill，使未来所有 design-driven 项目都能从第一稿开始受益。
-
-### 改动清单
-
-| 文件 | 改动内容 |
-|------|---------|
-| `WORKING_SPEC.md` | 新增 §8「design-driven 路径：设计还原规则沉淀」，含7类规则分类表、Figma MCP 对齐数据机制、生成物标准、质量目标和不可退化约束 |
-| `scripts/init_designer_vibecoding_project.py` | 新增 `make_design_role_rules()` 函数，生成包含7个章节框架 + QA 清单 + CHANGELOG 的初始模板；`main()` 中 `design-driven` 路径下自动写入 `agent-context/design-role-rules.md` |
-
-### 规则体系核心内容（7类）
-
-| 类别 | 核心规则 | 典型根因 |
-|------|---------|---------|
-| §1 图标 | IMAGE-SVG → IconPlaceholder，禁止文字/自绘 | 未查节点 type |
-| §2 Border | Inside stroke → border-box；fill子元素容器 → outline | border-box 压缩 fill 内容区 |
-| §3 尺寸 | sizing 必须从 Component Set 直接读取 | 从使用侧推断 |
-| §4 节点类型 | 实现前必须查 Figma 节点 type 字段 | 凭语义猜 |
-| §5 布局对齐 | Auto Layout → MCP 直接给 align；绝对定位 → 只给坐标，需手动判断居中意图 | 字面翻译 x/y 坐标 |
-| §6 组件系统 | 变体从 Component Set 顶层枚举 | 从使用侧实例读取遗漏变体 |
-| §7 QA 清单 | 逐层走查（图标→尺寸→border→布局→变体） | 局部验证遗漏系统性问题 |
-
-### 关键新增发现（v1.8）
-
-**Figma MCP 对齐数据返回机制**：
-- Auto Layout 子元素：直接返回 `alignItems` / `justifyContent` / `alignSelf`，可直接映射 CSS
-- 绝对定位元素：只返回 `locationRelativeToParent: {x, y}`，无对齐标签，需手动判断是否居中意图
-
-### 改动原因
-
-- 在 vibcoding 思维导图项目中，通过6个典型 bug 的根因分析和修复，形成了可复用的规则体系
-- design-driven 路径的核心价值不只是"有设计稿"，还需要有系统性的还原规则保障还原质量
-- skill 的 `design-driven` 路径现在应该默认包含 `design-role-rules.md` 框架，而非让团队从零开始摸索
-
-### 风险与影响
-
-- 无能力削减：新增生成物（`design-role-rules.md`）是可选的模板框架，不影响现有流程
-- 生成的 `design-role-rules.md` 是空白框架（典型案例处留占位符），由 design-analyst 在项目启动时填充，避免"强塞内容"
-- `zero-to-one` 路径不受影响，不会生成该文件
-
-### 需要 Codex 复核的点
-
-1. `make_design_role_rules()` 函数中 `{x, y}` 占位符是否在 f-string 中需要转义（已用字符串拼接规避）
-2. `agent-context/default-context.md` 是否应在 design-driven 路径中引用 `design-role-rules.md`（当前版本未引用，可作为下一轮迭代）
-3. 是否应在 `AGENTS.md` 的 `Must-Read Order` 中加入 `design-role-rules.md`（design-driven 路径）
+1. `init_designer_vibecoding_project.py` 是否应在 scaffold 时生成一个联通性验证脚本（如 `scripts/verify_codex_link.sh`），让用户随时可以跑？
+2. 认证检查的 `~/.codex/auth.json` 路径在 Windows/Linux 下的对应路径是否已知？
+3. Phase 0 失败时是否应该将失败原因写入 `.agent/status.json`，方便后续排查？
 
 ---
 

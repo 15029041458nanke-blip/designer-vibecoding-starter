@@ -2,6 +2,8 @@
 
 这份文档是 `designer-vibecoding-starter` 的唯一事实源。
 
+> **最近更新（2026-03-20）**：加入多 Agent 协同链路自动验证（Phase 0）、模型分工成本规划、用户引导三大能力。详见 §1.3 和 §2.10。
+
 目标不是继续写散的建议，而是让 Codex 和 Claude 围绕同一份规格协作，把这个 skill 打磨成一个真正可用、可发布、可复用的项目初始化器。
 
 ---
@@ -48,6 +50,35 @@
 5. 用户希望任务可以在后台继续跑，不用一直盯着窗口
 
 它不能只适合其中一个场景，而是必须把这些选择在初始化阶段说明白。
+
+---
+
+## 1.3 新增：多 Agent 协同场景支持（v2 重点）
+
+这个 skill 在 v2 版本中，必须覆盖以下新场景：
+
+### 场景：用户选择 claude-planner-codex-builder 模式
+
+1. **自动打通连接**：在 scaffold 之前，自动运行三步联通验证（CLI 检查 → 认证检查 → hello 测试），失败时给出可操作的修复引导，不静默跳过。
+
+2. **规划模型分工**：初始化完成后，明确告知用户：
+   - Claude 做什么（规划侧：需求/架构/review）
+   - Codex 做什么（执行侧：代码/测试/修复）
+   - 如何搭配使用以节省套餐消耗
+
+3. **成本优化建议**：
+   - Codex 使用 ChatGPT Plus 套餐登录时不额外计费（相对 Claude API 更省）
+   - 执行侧任务应优先交给 Codex，规划侧才用 Claude
+   - Claude 配额告急时提供切换到 `codex-fullstack-workflow` 的方案
+
+4. **中文路径提示**：若目标路径含中文，主动提示用户潜在的 Codex WebSocket 编码警告，并说明解决方法。
+
+### 联通性验证失败的处理策略
+
+- **CLI 未安装** → 给出安装命令，等待用户操作，重新验证
+- **未登录** → 给出 `codex login` 命令，说明需要在系统终端操作（Claude Code 内无法交互登录），等待用户确认
+- **网络失败** → 说明可能的原因（防火墙/VPN/token 过期），建议用户重新登录后重试
+- **中文路径 WARNING** → 说明为 Codex CLI BUG，不影响执行，告知临时绕过方法
 
 ---
 
@@ -124,6 +155,16 @@
 
 - `workflow_intent.sh` 不能退化成只返回一个示例 JSON
 - 它至少要保留“中文意图 -> 协作模式判断”的实际价值
+
+---
+
+## 2.10 链路联通验证是 claude-planner-codex-builder 模式的强制前置步骤
+
+不允许在以下情况下直接 scaffold：
+- 用户选择了 `claude-planner-codex-builder`
+- 但 Codex CLI 未安装 / 未登录 / 联通测试失败
+
+必须完成验证（Phase 0）并给出明确结果后再继续，或在用户知情的情况下选择"跳过验证，稍后自行配置"。
 
 ---
 
@@ -332,70 +373,6 @@ Claude 后续的每一轮优化，都应该用下面这几个问题来判断是�
 Claude 下一轮复核时，请重点看这 4 件事：
 
 1. 如何在不牺牲简洁度的前提下，修回 `workflow_intent.sh` 的可用能力
-2. 如何给初始化脚本补上"已有目录保护"
+2. 如何给初始化脚本补上“已有目录保护”
 3. 如何处理 `agent_run.sh` 的占位状态，避免伪完成
 4. 是否应恢复 `agents/openai.yaml`
-
----
-
-## 8. design-driven 路径：设计还原规则沉淀（Round 5 新增）
-
-### 8.1 背景
-
-在真实的 design-driven 项目（vibcoding 思维导图）中，经过多轮 Figma → 代码还原与质检，我们总结出了一套系统性的设计还原规则，适用于 `design-analyst` → `engineer` → `reviewer` 的完整链路。
-
-这套规则已在项目内落地为 `agent-context/design-role-rules.md`（v1.8），并验证有效。
-
-### 8.2 核心规则分类（共 7 类）
-
-| 类别 | 核心内容 | 典型陷阱 |
-|------|---------|---------|
-| §1 图标规则 | IMAGE-SVG 节点禁止用文字或自绘替代，统一用 `IconPlaceholder`（20px容器+18px圆+1.5px描边） | 凭语义自造图标内容 |
-| §2 Border 规则 | Inside stroke → CSS border-box；含 fill 子元素的结构性容器用 `outline` 不用 `border` | border-box 压缩 fill 子元素内容区 |
-| §3 尺寸规则 | sizing 类型（hug/fixed/fill）必须从 Component Set 直接读取，不能从使用侧推断 | 从父容器使用侧推断 fill/fixed |
-| §4 节点类型识别 | 实现前必须查 Figma 节点 `type` 字段，`TEXT` 才用文字，其余用 IconPlaceholder | 未查 type 凭语义猜 |
-| §5 布局对齐 | Auto Layout：MCP 直接返回 `alignItems`/`justifyContent`；绝对定位：只返回 `locationRelativeToParent {x,y}`，需手动判断居中意图 | 字面翻译绝对定位坐标为 top/left |
-| §6 组件系统 | 变体必须从 Component Set 顶层节点枚举，不能从使用侧实例读取 | 从使用侧实例读取，遗漏变体 |
-| §7 QA 清单 | 逐层走查：图标→尺寸→border→布局→变体→token | 局部验证遗漏系统性问题 |
-
-### 8.3 关键发现：Figma MCP 对齐数据机制
-
-Figma MCP **会**返回对齐属性，但分两类：
-
-- **Auto Layout 子元素**：直接返回 `alignItems` / `justifyContent` / `alignSelf`，可直接映射 CSS flex 属性
-- **绝对定位元素**（`position: absolute`）：只返回 `locationRelativeToParent: {x, y}`，无对齐标签，需手动判断：
-  - 若 `x == (父宽-子宽)/2` 且 `y == (父高-子高)/2` → 居中意图 → `inset: 0 + flex 双轴居中`
-  - 否则 → 真实偏移 → `top/left`（须加父容器 border 宽度修正）
-
-### 8.4 design-driven 项目生成物标准
-
-skill 初始化 `design-driven` 路径时，除原有设计文件外，应额外生成：
-
-```
-agent-context/
-  design-role-rules.md   ← 设计还原规则手册（新增生成物）
-```
-
-该文件包含以下章节的初始框架（空模板），供团队在项目中迭代填充：
-- §1 图标规则
-- §2 Border 规则
-- §3 尺寸规则
-- §4 节点类型识别
-- §5 布局对齐规则（含 MCP 数据机制说明）
-- §6 组件系统规则
-- §7 QA 走查清单
-- §CHANGELOG
-
-### 8.5 还原质量目标
-
-| 阶段 | 目标 |
-|------|------|
-| 第一稿还原 | > 80% 精准还原（基于完整规则手册） |
-| 质检修复 | 平均每轮 QA 发现问题 < 5 个 |
-| 规则迭代 | 每发现新典型问题 → 立即追加规则案例并更新 CHANGELOG |
-
-### 8.6 不可退化约束
-
-- `design-role-rules.md` 不能是纯描述文档，必须包含可执行的走查清单（§7）
-- 规则必须有触发案例支撑（无案例的规则不算有效规则）
-- 新项目初始化时生成的是"空白模板框架"，不是已填充内容——填充由 design-analyst 角色在项目启动时完成

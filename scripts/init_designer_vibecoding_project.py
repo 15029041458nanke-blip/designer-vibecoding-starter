@@ -1,4 +1,24 @@
 #!/usr/bin/env python3
+"""
+init_designer_vibecoding_project.py
+单模型多 Agent 项目脚手架初始化脚本（v3.0）
+
+用法：
+    python init_designer_vibecoding_project.py \
+        --target /path/to/my-project \
+        --project-name "我的产品" \
+        --path-mode zero-to-one        # 或 design-driven
+        [--merge]                      # 允许向非空目录写入
+
+变更（v3.0）：
+    - 移除 --workflow / --openclaw 参数（不再支持 Codex/OpenClaw 架构）
+    - 新增 skills/ 目录，内联 7 个 SKILL.md 文件
+    - 新增 project-management/prd-registry.md（PRD 主控追踪）
+    - 新增 agent-context/design-role-rules.md（仅 design-driven 路径）
+    - 移除 .agent/ / ai-workflows/ / openclaw 相关脚本生成
+    - AGENTS.md 更新为 v2.1 单模型多 Agent 风格
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -7,652 +27,917 @@ from datetime import datetime
 from pathlib import Path
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 工具函数
+# ──────────────────────────────────────────────────────────────────────────────
+
 def write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content.rstrip() + "\n", encoding="utf-8")
-
-
-def yes_no(value: bool) -> str:
-    return "yes" if value else "no"
 
 
 def today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def now_iso() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
+# ──────────────────────────────────────────────────────────────────────────────
+# 顶层治理文件
+# ──────────────────────────────────────────────────────────────────────────────
 
 def make_agents_md(project_name: str) -> str:
-    return f"""# AGENTS.md
+    return f"""# AGENTS.md（项目级总规则入口）
 
-## Purpose
-- Keep this project usable, collaborative, and easy to hand off.
-- Use the workflow files as the source of truth instead of chat memory.
+> 最高优先级规则文件。所有 agent、子 agent、工具调用均须遵守本文件。
+> 本文件 = 强制规则，不是建议。
+> 版本：v2.1（单模型多 Agent + PRD 驱动开发流）
 
-## Working Rules
-- Start small, verify fast, expand later.
-- Do not change scope silently.
-- Write plans for tasks with 3+ steps or any architecture decision.
-- Do not mark work done without runnable evidence.
+---
 
-## Must-Read Order
-1. `AGENTS.md`
-2. `agent-context/current-workflow.md`
-3. `project-management/active-sprint.md`
+## 项目信息
 
-## Project
-- Name: `{project_name}`
-- This repo was initialized from `designer-vibecoding-starter`.
+- **项目名**：{project_name}
+- **初始化**：{today()} via `designer-vibecoding-starter`
+
+---
+
+## 1. 协作架构（单模型多 Agent）
+
+本项目采用 **单模型多 Agent** 模式，Codewiz 是唯一主导：
+
+```
+用户
+ └→ Codewiz（主 agent：规划 + 编排 + review）
+       ├─ 子 agent-1（实现 task-1，隔离上下文）
+       ├─ 子 agent-2（review task-1，隔离上下文）
+       ├─ 子 agent-3（实现 task-2，隔离上下文）
+       └─ ...
+```
+
+**核心原则**：
+- Codewiz 是唯一编排者，负责规划、拆解、派发子 agent、review
+- 每个子 agent 获得精确构造的上下文（不继承对话历史）
+- 子 agent 只执行一个明确的 task，完成后上报状态
+
+---
+
+## 1.5 角色 → Skill 对照表
+
+| 原角色 | 对应 Skill | 触发条件 |
+|--------|-----------|---------|
+| `design-analyst` | `skills/design-analysis` | 有设计稿输入 / UI 任务完成前 |
+| `product-strategist` | `skills/requirements-refinement` | 需求不清 / PRD 缺 AC |
+| `project-manager` | `project-management/prd-registry.md` 协议 | 会话启动 / 任务完成 |
+| `architect` | `skills/architecture-check` + `skills/writing-plans` | 架构变更前 / 中大任务 |
+| `engineer` | 子 agent 执行协议 | 每个实现 task |
+| `reviewer` | `skills/two-stage-review` | 每个 task 完成后 |
+| `tester` | `two-stage-review` AC 验证阶段 | 同 reviewer |
+
+---
+
+## 2. 任务分级与强制流程
+
+### 🟢 小任务（≤2步，单文件，无架构变更）
+```
+直接实现 → verify（build 通过）→ 完成
+```
+
+### 🟡 中任务（3-6步，跨2个模块）
+```
+写 plan → spec 自检 → 实现（可派子 agent）→ 两阶段 review → 完成
+```
+
+### 🔴 大任务（跨模块/架构调整/高风险）
+```
+brainstorming → 写 spec → spec 自检 → 用户 review spec
+→ 写 plan → 子 agent 实现（每 task 独立）→ 两阶段 review → 完成
+```
+
+**不允许跳级**：大任务不得直接进入实现。
+
+---
+
+## 3. 强制 Skill：何时触发
+
+| 触发情况 | 必须使用的 Skill |
+|---|---|
+| 输入包含 Figma 链接 / 设计稿引用 | `skills/design-analysis` Phase-1 |
+| 任何 UI 任务进入 DoD 前 | `skills/design-analysis` Phase-2 |
+| 需求描述不具体 / PRD 缺 AC | `skills/requirements-refinement` |
+| 任何 bug / 测试失败 / 意外行为 | `skills/systematic-debugging` |
+| 新功能 / 新组件（中/大任务） | `skills/writing-plans` |
+| 大任务需求不清晰 | `skills/brainstorming` |
+| 每个 task 完成后 | `skills/two-stage-review` |
+| 架构变更前 | `skills/architecture-check` |
+
+---
+
+## 4. 子 Agent 协议
+
+子 agent 状态：`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`
+
+- `BLOCKED` 连续 3 次 → 停止，向用户上报，不得继续猜测
+- 派发时必须提供：任务全文 + 相关文件路径 + 验证命令
+
+---
+
+## 5. Plan 质量规则
+
+```
+❌ "TBD" / "TODO" / "后续处理"
+❌ "添加适当的错误处理"
+❌ 没有验证命令的步骤
+❌ 代码步骤没有实际代码
+```
+
+---
+
+## 6. 两阶段 Review 门控
+
+每个 task 完成后必须执行（见 `skills/two-stage-review/SKILL.md`）：
+1. Spec 合规 Review
+2. 代码质量 Review
+
+两关都通过才算完成。
+
+---
+
+## 7. 完成定义（DoD）
+
+- [ ] 功能可运行
+- [ ] `npm run build`（或对应构建命令）通过
+- [ ] 两阶段 review 通过
+- [ ] 有设计稿时：Design QA 通过
+- [ ] 无明显回归风险
+
+---
+
+## 8. 会话启动协议（PRD 驱动）
+
+每次新会话，必须：
+
+```
+1. 读 AGENTS.md（本文件）
+2. 读 agent-context/current-workflow.md
+3. 读 project-management/prd-registry.md
+4. 读 LEARNINGS.md（如存在）
+5. 告知用户：当前 Active PRD 是 [XXX]，下一步是 [task]，确认继续？
+```
+
+---
+
+## 9. 任务完成更新协议
+
+每个任务完成后：
+
+```
+1. 在 prd-registry.md 中将该任务标记为 ✅ done
+2. 将下一个任务标记为 🔄 in-progress
+3. 如果当前 PRD 所有任务完成 → PRD 移入已完成，取下一个 PRD
+4. 更新 project-management/changelog.md
+```
+
+---
+
+## 10. Skills 目录
+
+```
+skills/
+├── design-analysis/SKILL.md         # 设计分析（前置 + 后置 QA）
+├── requirements-refinement/SKILL.md # 需求精化（DoR 检查 + AC 补全）
+├── systematic-debugging/SKILL.md    # Debug 四阶段规则
+├── writing-plans/SKILL.md           # Plan 写作规范
+├── brainstorming/SKILL.md           # 需求探索
+├── two-stage-review/SKILL.md        # 两阶段 Review
+└── architecture-check/SKILL.md      # 架构变更前检查
+```
+
+---
+
+## 11. 信息写入路由（★ 强制前置判断）
+
+**每次需要记录/新增任何信息时，必须先执行以下判断，再决定写哪个文件。禁止直接追加到 AGENTS.md。**
+
+```
+要写的内容是什么？
+│
+├── 产品交互行为规则
+│   （菜单关闭、颜色规则、操作约束、UI 状态机等）
+│   → 写入 docs/product/ 对应 .md 文件
+│   → 在本文件第 12 章引用表格里加一行指针
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 开发经验/踩坑记录
+│   → 写入 LEARNINGS.md 或 tasks/knowledge/lessons.md
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 需求/功能/AC
+│   → 写入 tasks/prd/ 对应 PRD 文件
+│   → 在 project-management/prd-registry.md 更新状态
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 重要架构/产品决策
+│   → 写入 project-management/decision-log.md
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+└── AI 协作流程规则
+    （agent 协议、DoD 定义、review 流程、Skill 触发条件）
+    → 写入 AGENTS.md 或 skills/ 对应 SKILL.md
+    ✅ 这是 AGENTS.md 唯一允许的新增内容类型
+```
+
+**快速判断口诀**：去掉 AI 工具后，工程师还需要这条信息吗？
+- 需要 → 不属于 AGENTS.md，找对应的产品/需求/决策文件
+- 不需要 → 属于 AI 协作层，可以写入 AGENTS.md 或 skills/
+
+---
+
+## 12. 产品规范引用表（只放指针，正文在 docs/product/）
+
+| 规范类型 | 文档位置 |
+|---------|---------|
+| 交互规则（菜单关闭、组件行为等） | [`docs/product/`](docs/product/) |
+
+---
+
+_版本：v2.2 | 初始化时间：{today()}_
 """
 
 
-def make_current_workflow(workflow_id: str) -> str:
-    owner = "claude+codex" if workflow_id == "claude-planner-codex-builder" else "codex"
+def make_learnings_md() -> str:
+    return f"""# LEARNINGS.md
+
+> 记录本项目的经验教训。每次会话开始时必读，避免重复犯同类错误。
+
+---
+
+## 规则
+
+- 每次重复出现的问题，在此记录一条教训
+- 每条教训格式：`[日期] [类别] 描述`
+- 类别：`[架构]` / `[调试]` / `[需求]` / `[工作流]`
+
+---
+
+## 教训记录
+
+<!-- 在此追加，最新的放在最上面 -->
+
+_{today()} 项目初始化，暂无教训记录_
+"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# agent-context/
+# ──────────────────────────────────────────────────────────────────────────────
+
+def make_current_workflow(path_mode: str) -> str:
+    path_desc = (
+        "设计驱动路径：Figma → design-analysis Phase-1 → PRD → 实现 → Design QA"
+        if path_mode == "design-driven"
+        else "0-1 路径：逐步追问（6 步）→ PRD 确认 → 实现 → review"
+    )
     return f"""# Current Workflow
 
-workflow_id: {workflow_id}
 updated_at: {today()}
-owner: {owner}
+path_mode: {path_mode}
 
-## Start Here
+---
+
+## 启动必读顺序
+
 1. `/AGENTS.md`
-2. `/agent-context/current-workflow.md`
-3. `/agent-context/default-context.md`
-4. `/project-management/active-sprint.md`
-5. `/project-management/backlog.md`
+2. `/agent-context/current-workflow.md`（本文件）
+3. `/project-management/prd-registry.md`
+4. `/LEARNINGS.md`（如存在）
 
-## Rule
-- Only one workflow is active at a time.
-- If switching workflow, update this file first.
-"""
+## 当前交付路径
 
+{path_desc}
 
-def make_default_context(path_mode: str, openclaw_enabled: bool) -> str:
-    path_line = (
-        "Design-driven path: design analysis -> PRD -> product check -> build -> test -> design QA"
-        if path_mode == "design-driven"
-        else "Zero-to-one path: intent -> planning -> PRD -> spec/todo -> build -> test -> review"
-    )
-    remote_line = (
-        "OpenClaw is enabled for optional background execution."
-        if openclaw_enabled
-        else "OpenClaw is not enabled in this project by default."
-    )
-    return f"""# Default Context
+## 设计稿场景判断
 
-## Delivery Path
-- {path_line}
+| 场景 | 判断标准 | 处理方式 |
+|------|---------|---------|
+| A：大型多功能设计稿 | 顶层 Frame ≥2，功能相互独立 | 拆分为多个 PRD，逐一分析 |
+| B：文字 PRD + 设计稿 | 用户同时提供两份输入 | 对照对齐，产出一致/疑点/风险三类结论 |
+| C：单组件设计稿 | 内容聚焦于一个组件/模块 | 先查 prd-registry，再决定是否新建 PRD |
 
-## Collaboration Modes
-- `claude-planner-codex-builder`
-- `codex-fullstack-workflow`
-- {remote_line}
+## 规则
 
-## Shared Inputs
-- `.agent/handoff.json` is the single task handoff source.
-- `.agent/status.json` is the single execution status source.
-- `scripts/agent_run.sh` is the single execution entry.
-"""
-
-
-def make_workflow_selector() -> str:
-    return """# Workflow Selector
-
-## Available modes
-
-1. `Claude Code + Codex`
-2. `Codex fullstack`
-3. `OpenClaw` background execution (optional overlay)
-
-## Example Chinese intents
-
-- `切换到 Claude 规划 + Codex 开发`
-- `跟我用 Codex 协作链路`
-- `开启 OpenClaw 后台执行`
-"""
-
-
-def make_collab_overview(path_mode: str, openclaw_enabled: bool) -> str:
-    path_label = "基于设计稿" if path_mode == "design-driven" else "0-1 无设计稿"
-    openclaw_line = "Enabled" if openclaw_enabled else "Disabled"
-    return f"""# Collaboration Workflows Overview
-
-## Current delivery path
-- {path_label}
-
-## Modes
-- `claude-planner-codex-builder`
-- `codex-fullstack-workflow`
-- `OpenClaw`: {openclaw_line}
-
-## Single sources of truth
-- `agent-context/current-workflow.md`
-- `.agent/handoff.json`
-- `.agent/status.json`
-- `scripts/agent_run.sh`
-"""
-
-
-def make_workflow_doc(name: str, summary: str) -> str:
-    return f"""# {name}
-
-## Summary
-- {summary}
-
-## Steps
-1. Clarify the task
-2. Write or refine the spec/todo
-3. Fill `.agent/handoff.json`
-4. Execute with `scripts/agent_run.sh`
-5. Verify and record results
-"""
-
-
-def make_agent_roles() -> str:
-    return """# Agent Roles
-
-- `project-manager`: clarify scope and track status
-- `architect`: define implementation structure
-- `engineer`: implement the change
-- `tester`: run validation
-- `reviewer`: check risk and regressions
-- `design-analyst`: translate design into implementation constraints
-"""
-
-
-def make_figma_mcp_setup() -> str:
-    return (
-        "# Figma MCP 接入指南\n\n"
-        "> **定位**：design-driven 路径下，Figma MCP 是设计稿分析与图标下载的核心工具。\n"
-        "> 完成以下配置后，Claude 可以直接读取 Figma 文件结构、下载 SVG 图标到本地。\n\n"
-        "---\n\n"
-        "## 步骤 1：获取 Figma Personal Access Token\n\n"
-        "1. 打开 Figma → 右上角头像 → **Settings**\n"
-        "2. 进入 **Security** 标签页\n"
-        "3. 点击 **Generate new token**（Personal access tokens）\n"
-        "4. 填写名称（如 `claude-mcp`），权限选 **Read-only**（File content）\n"
-        "5. 复制 Token（只显示一次，请保存好）\n\n"
-        "---\n\n"
-        "## 步骤 2：配置 Claude Code MCP（.mcp.json）\n\n"
-        "在项目根目录创建 `.mcp.json`：\n\n"
-        "```json\n"
-        "{\n"
-        '  "mcpServers": {\n'
-        '    "figma": {\n'
-        '      "command": "npx",\n'
-        '      "args": ["-y", "figma-developer-mcp", "--stdio"],\n'
-        '      "env": {\n'
-        '        "FIGMA_API_KEY": "YOUR_FIGMA_TOKEN_HERE"\n'
-        "      }\n"
-        "    }\n"
-        "  }\n"
-        "}\n"
-        "```\n\n"
-        "替换 `YOUR_FIGMA_TOKEN_HERE` 为步骤 1 中的 Token。\n\n"
-        "---\n\n"
-        "## 步骤 3：安装 vite-plugin-svgr（SVG → React 组件）\n\n"
-        "```bash\n"
-        "npm install --save-dev vite-plugin-svgr\n"
-        "```\n\n"
-        "**vite.config.ts**：\n\n"
-        "```ts\n"
-        "import svgr from 'vite-plugin-svgr'\n"
-        "export default defineConfig({\n"
-        "  plugins: [svgr(), react()],\n"
-        "})\n"
-        "```\n\n"
-        "**src/vite-env.d.ts**：\n\n"
-        "```ts\n"
-        "/// <reference types=\"vite/client\" />\n"
-        "/// <reference types=\"vite-plugin-svgr/client\" />\n"
-        "```\n\n"
-        "---\n\n"
-        "## 步骤 4：使用 download_figma_images 下载图标（方案 A · 优先）\n\n"
-        "在 Claude 对话中说：\n\n"
-        "> 使用 download_figma_images 下载 Figma 节点 [nodeId] 为 SVG，保存到 src/assets/icons/[name].svg\n\n"
-        "**注意事项**：\n"
-        "- `nodeId` 必须是顶层可导出节点（Frame / Component 顶层，非内部子节点）\n"
-        "- 从 Figma URL 获取：`node-id=5023-57260` → nodeId = `5023:57260`\n"
-        "- `fileKey` 从 Figma URL 获取：`figma.com/design/[fileKey]/...`\n"
-        "- 若工具报路径沙箱错误，切换到方案 B\n\n"
-        "---\n\n"
-        "## 步骤 4B：REST API 脚本批量下载（方案 B · 兜底）\n\n"
-        "当 `download_figma_images` MCP 工具因路径沙箱无法写入项目目录时，改用 Python 脚本调用 Figma REST API：\n\n"
-        "```bash\n"
-        "# 脚本已预置在项目 scripts/ 目录\n"
-        "FIGMA_TOKEN=\"figd_xxx\" python3 scripts/download-figma-icons.py\n"
-        "# 或\n"
-        "python3 scripts/download-figma-icons.py --token figd_xxx\n"
-        "```\n\n"
-        "脚本会将所有图标 SVG 下载到 `src/assets/icons/`，并打印 React 导入代码。\n\n"
-        "**方案 B 配置说明**（需要在脚本中修改的变量）：\n"
-        "- `FILE_KEY`：Figma 文件 key（从 URL 获取）\n"
-        "- `ICON_NODES`：`{ '节点ID': '文件名' }` 字典（节点 ID 必须是 instance 节点，不是 Component 定义节点）\n\n"
-        "---\n\n"
-        "## 步骤 5：在 React 中使用下载的 SVG\n\n"
-        "```tsx\n"
-        "// vite-plugin-svgr v4+ 正确导入方式（不是 ReactComponent）：\n"
-        "export { default as FillColorIcon } from '../../assets/icons/icon-fill-color.svg?react'\n\n"
-        "// 使用\n"
-        "import { FillColorIcon } from '@/components/icons'\n"
-        "<FillColorIcon width={20} height={20} aria-label=\"填充色\" />\n"
-        "```\n\n"
-        "---\n\n"
-        "## 完整图标还原流程\n\n"
-        "```\n"
-        "get_figma_data → 找到图标节点 nodeId\n"
-        "     ↓\n"
-        "方案A: download_figma_images → src/assets/icons/[name].svg\n"
-        "方案B: python3 scripts/download-figma-icons.py → src/assets/icons/[name].svg\n"
-        "     ↓\n"
-        "export { default as XxxIcon } from '../../assets/icons/[name].svg?react'\n"
-        "     ↓\n"
-        "替换 <IconPlaceholder /> → <XxxIcon width={20} height={20} />\n"
-        "```\n\n"
-        "---\n\n"
-        "## 常见问题 & 踩坑记录\n\n"
-        "| 问题 | 原因 | 解决 |\n"
-        "|------|------|------|\n"
-        "| 404 Not Found | nodeId 是 Component 内部子节点 | 在 Figma 里选顶层 Frame/Component，从 URL 获取 node-id |\n"
-        "| 无权限 | Token 权限不足 | 重新生成 Token，勾选 File content Read |\n"
-        "| SVG 无 currentColor | Figma 导出时颜色被硬编码 | 手动将 fill 值替换为 `currentColor` |\n"
-        "| download_figma_images 路径沙箱 | MCP 工具无法写入 Desktop 等受限目录 | 切换方案 B：Python 脚本 + Figma REST API |\n"
-        "| REST API images key 格式 | 误以为是连字符格式 | 实测：返回 key 是原始冒号格式（`5000:76419`），与请求 nodeId 一致 |\n"
-        "| Component 定义节点返回 null | Figma Images API 不导出 Component 定义节点 | 改用对应的 instance 节点 ID（从 Component 使用侧 inspect 获取）|\n"
-        "| vite-plugin-svgr v4+ ReactComponent 不存在 | v4 改变了导出方式 | 改用 `export { default as X } from '*.svg?react'`，不用 `ReactComponent` |\n"
-        "| JSX namespace 类型错误 | 函数返回类型过窄 | 函数顶部加 `import React from 'react'`，返回类型改为 `React.ReactElement | null` |\n"
-    )
-
-
-def make_design_role_rules(creation_date: str) -> str:
-    return (
-        "# Design Role Rules — 设计还原规则手册\n\n"
-        "> **定位**：设计角色（design-analyst / engineer 还原阶段 / reviewer 走查阶段）的强制遵守规则集。\n"
-        "> **目标**：第一稿还原率 > 80%，逐版本迭代提升。\n"
-        "> **更新机制**：每次发现新的典型还原问题，立即在对应章节追加案例。\n\n"
-        "---\n\n"
-        "## §1 图标（Icon）还原规则\n\n"
-        "### 方案 A（优先）：download_figma_images MCP 直接下载\n\n"
-        "通过 `download_figma_images` MCP 工具下载真实 SVG，配合 `vite-plugin-svgr` 转为 React 组件。\n"
-        "详见 `docs/design/figma-mcp-setup.md` 步骤 4。\n\n"
-        "```tsx\n"
-        "// vite-plugin-svgr v4+ 正确写法（不是 ReactComponent）\n"
-        "export { default as FillColorIcon } from '../../assets/icons/icon-fill-color.svg?react'\n"
-        "// 使用\n"
-        "<FillColorIcon width={20} height={20} />\n"
-        "```\n\n"
-        "### 方案 B（兜底）：REST API Python 脚本批量下载\n\n"
-        "当 `download_figma_images` 因路径沙箱无法写入时，运行 `scripts/download-figma-icons.py`：\n\n"
-        "```bash\n"
-        "FIGMA_TOKEN=\"figd_xxx\" python3 scripts/download-figma-icons.py\n"
-        "```\n\n"
-        "修改脚本中 `FILE_KEY` 和 `ICON_NODES` 字典后即可使用。详见 `docs/design/figma-mcp-setup.md` 步骤 4B。\n\n"
-        "### §1 踩坑记录\n\n"
-        "- **nodeId 格式**：Figma Images API 返回的 key 是原始冒号格式（如 `5000:76419`），不是连字符\n"
-        "- **Component 定义节点**：API 对 Component 定义节点返回 null，需改用对应 instance 节点 ID\n"
-        "- **vite-plugin-svgr v4+**：用 `export { default as X } from '*.svg?react'`，不用 `ReactComponent`\n"
-        "- **NodeShell 与 MindmapNode 共享样式**：预览组件应输出相同 CSS class，不要用 inline style 另起炉灶\n\n"
-        "### §1 兜底方案：IconPlaceholder 临时占位\n\n"
-        "当两种下载方案均不可用时（Token 未配置 / 网络不通），用 `IconPlaceholder` 临时占位，**禁止**：\n"
-        "- 用文字替代图标\n"
-        "- 自行绘制语义化图标\n\n"
-        "IconPlaceholder 规格（项目启动时确认）：容器尺寸 / 内圆直径 / 描边粗细\n\n"
-        "### §1 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §2 Border 还原规则\n\n"
-        "- 默认策略：内 border → `width/height` 显式固定 + `box-sizing: border-box`\n"
-        "- 含 `fill` 子元素的结构性容器：用 `outline` 不用 `border`（Figma Inside stroke 不压缩 fill 子内容，CSS border-box 会压缩）\n"
-        "- 验证：浏览器渲染尺寸 == Figma 标注尺寸 ✅\n\n"
-        "### §2 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §3 尺寸还原规则\n\n"
-        "- sizing 类型（hug/fixed/fill）必须从 Component Set 直接读取，禁止从使用侧推断\n"
-        "- 从小到大逐层验证：icon → button → row → panel → modal\n\n"
-        "### §3 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §4 节点内容类型识别规则\n\n"
-        "实现前必须查 Figma 节点 `type`：\n\n"
-        "| Figma type | 对应实现 |\n"
-        "|-----------|----------|\n"
-        "| `TEXT` | 文字 children |\n"
-        "| `IMAGE-SVG` / `VECTOR` / `BOOLEAN_OPERATION` | `IconPlaceholder`，禁止用文字 |\n"
-        "| `FRAME` / `INSTANCE` | React 组件或 div |\n"
-        "| `RECTANGLE` / `ELLIPSE` | CSS 形状或 SVG 基本图形 |\n\n"
-        "### §4 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §5 布局对齐规则\n\n"
-        "**Figma MCP 对齐数据返回机制**：\n\n"
-        "| 元素类型 | MCP 返回 | 处理方式 |\n"
-        "|---------|---------|----------|\n"
-        "| Auto Layout 子元素 | `alignItems` / `justifyContent` / `alignSelf` | 直接映射 CSS flex 属性 |\n"
-        "| 绝对定位元素 | 只有 `locationRelativeToParent: {x, y}` | 手动判断居中意图 |\n\n"
-        "居中意图判断：若 `x == (父宽-子宽)/2` 且 `y == (父高-子高)/2` → 用 `inset: 0 + flex`，禁止字面翻译坐标为 top/left。\n\n"
-        "排列数量验证：`N × 元素宽 + (N-1) × gap ≤ 容器可用宽度`\n\n"
-        "### §5 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §6 组件系统规则\n\n"
-        "- 变体必须从 Component Set 顶层节点枚举，禁止从使用侧实例读取\n"
-        "- 正确路径：`componentSetId` → Component Set children → 完整变体列表\n\n"
-        "### §6 典型案例\n\n> （在此处追加每次发现的案例）\n\n"
-        "---\n\n"
-        "## §7 设计走查清单（QA Checklist）\n\n"
-        "- [ ] 所有图标已用 IconPlaceholder，无文字替代\n"
-        "- [ ] 每个组件 width / height 与 Figma 标注值相差 ≤ 0.5px\n"
-        "- [ ] 含 fill 子元素的容器边框：用 `outline` 而非 `border`\n"
-        "- [ ] 每行/列元素数量与设计稿完全一致\n"
-        "- [ ] 绝对定位居中元素：已判断居中意图，用 `inset:0 + flex`\n"
-        "- [ ] 所有 Component Set 变体均已实现\n\n"
-        "---\n\n"
-        "## §CHANGELOG\n\n"
-        "| 日期 | 版本 | 内容 | 触发问题 |\n"
-        "|------|------|------|----------|\n"
-        f"| {creation_date} | v0.1 | 初始框架生成，by designer-vibecoding-starter | 项目初始化 |\n"
-    )
-
-
-def make_design_file(title: str, active: bool, body: str) -> str:
-    status = "active" if active else "optional"
-    return f"""# {title}
-
-status: {status}
-
-{body}
+- 只有一条交付路径在同一时间是 active 的
+- 如需切换路径，先更新本文件
 """
 
 
 def make_design_role_rules() -> str:
-    return f"""# Design Role Rules — 设计还原规则手册
+    """仅 design-driven 路径生成"""
+    return """# Design Role Rules
 
-> **定位**：设计角色（design-analyst / engineer 还原阶段 / reviewer 走查阶段）的强制遵守规则集。
-> **目标**：第一稿还原率 > 80%，逐版本迭代提升。
-> **更新机制**：每次发现新的典型还原问题，立即在对应章节追加案例，注明发现时间和修复方案。
->
-> 版本历史见文末 §CHANGELOG。
-
----
-
-## 使用说明
-
-本文件适用于设计驱动链路的三个环节：
-
-| 环节 | 读取重点 |
-|------|---------|
-| **设计分析**（design-analyst 提取 SPEC） | §1 图标 / §3 尺寸 / §4 节点内容类型 / §5 布局 / §6 组件系统 |
-| **代码转化**（engineer 实现） | §2 border / §3 尺寸 / §4 节点内容类型 / §5 布局排列数量 |
-| **设计走查**（design-analyst QA / reviewer） | §3 尺寸验证 / §5 排列数量验证 / §7 走查清单 |
-
-**规则优先级**：本文件 > SPEC 文档 > 实现惯例。若本文件与 SPEC 冲突，以本文件为准并更新 SPEC。
+> 本文件是 `skills/design-analysis/SKILL.md` 的扩展规则库。
+> 执行任何设计分析前必读。
+> 内容来源：项目实践沉淀，优先级高于 SKILL.md 文档。
 
 ---
 
-## §1 图标（Icon）还原规则
+## §1 图标还原规则
 
-### 1.1 核心规则
+- 始终使用设计稿指定的图标组件或 SVG，禁止用 emoji 替代
+- 图标尺寸：以设计稿像素值为准，映射到 `--icon-size-*` token
+- 图标颜色：继承父元素 `color`（`currentColor`），不硬编码
+- 不同状态下图标的变化（如 filled/outlined）必须在状态矩阵中标注
 
-Figma 中 `IMAGE-SVG` 类型的节点（图标）**无法通过 MCP 直接导出 SVG 路径数据**。
+## §2 Border 规则
 
-所有无法导出的图标，统一使用 `IconPlaceholder` 组件占位，**禁止**：
-- 用文字替代图标
-- 自行绘制语义化图标（自造箭头、形状等）
-- 留空不处理
-
-### 1.2 IconPlaceholder 规格（项目启动时确认，不得随意修改）
-
-```
-容器：[填入尺寸]px
-内圆：直径 [填入]px，描边粗细 [填入]px
-颜色：rgba(0, 0, 0, 0.15) stroke，无填充
-```
-
-### 1.3 典型错误案例
-
-> （在此处追加每次发现的案例）
-
----
-
-## §2 Border 还原规则
-
-### 2.1 Figma stroke → CSS border 映射
-
-**默认策略：内 border**（border 向内画，不撑大容器）
-
-```css
-element {{
-  width: [Figma标注值]px;
-  height: [Figma标注值]px;
-  box-sizing: border-box;
-  border: Npx solid {{color}};
-}}
-```
-
-### 2.2 验证方法
-
-浏览器 DevTools 测量渲染尺寸 vs Figma 标注尺寸：
-- ✅ **相同** → border 方向正确
-- ❌ **相差 N×2** → border 向外画了
-
-### 2.3 特殊场景：fill 子元素容器的结构性 border
-
-当容器含 `sizing: fill` 的子元素 + Inside stroke 时，**必须用 `outline`**，不能用 `border + border-box`。
-
-```css
-.container {{
-  outline: 0.5px solid rgba(0, 0, 0, 0.08); /* 不影响盒模型 */
-  border: none;
-}}
-```
-
-### 2.4 典型错误案例
-
-> （在此处追加每次发现的案例）
-
----
+- `backgroundColor`（填充色）与 `borderColor`（描边色）在同一节点上永远互斥
+  - 设填充色 → 清除 borderColor
+  - 设描边色 → 清除 backgroundColor
+- border-width：使用设计稿标注值，禁止四舍五入
+- border-radius：优先使用 design token（`--radius-*`），无 token 时使用具体 px 值
 
 ## §3 尺寸还原规则
 
-### 3.1 核心原则
+- 不得将设计稿 px 值"估计"为圆整数，必须与标注一致
+- 用 `rem` 时，换算基准明确标注（通常 1rem = 16px）
+- min-width / max-width 等约束：设计稿未标注时，必须作为"设计疑点"记录，不得自行推断
 
-还原后从小到大逐层验证：`icon → button → row → panel → modal`
+## §4 节点类型规则
 
-### 3.2 关键尺寸来源
+- Frame → `<div>`（布局容器）
+- Text → `<span>` 或 `<p>`（取决于块级/内联语义）
+- Component → 使用项目对应的 React/Vue 组件，不直接写 HTML
+- Group → 检查是否有布局含义（如果无，可以合并到父节点）
+- Vector/SVG → 直接导出为 SVG 文件，禁止用 PNG 代替
 
-从 Figma MCP `globalVars.styles` 中的 layout token 读取：
-- `dimensions.width / height` → fixed 尺寸
-- `padding` → 内边距
-- `gap` → 子元素间距
-- `borderRadius` → 圆角
+## §5 布局对齐规则
 
-### 3.3 重要原则
+- Auto Layout → CSS Flexbox
+  - direction: horizontal → `flex-direction: row`
+  - direction: vertical → `flex-direction: column`
+  - spacing: `gap` 属性
+  - padding: 按 top/right/bottom/left 分别设置
+- Grid Layout → CSS Grid
+- 绝对定位（Absolute）→ `position: absolute`，只在设计稿明确使用时才用
 
-**sizing 类型必须从组件自身 Component Set 直接读取，禁止从使用侧实例推断。**
+## §6 组件系统规则
 
-### 3.4 典型错误案例
+- 优先复用项目已有组件（查 src/components/ 或设计系统）
+- 新建组件前检查：功能是否与现有组件 ≥80% 重叠？若是，考虑扩展而非新建
+- 组件 Props 命名与设计稿的属性名保持一致（如 `variant`, `size`, `disabled`）
 
-> （在此处追加每次发现的案例）
+## §7 走查清单（Design QA 执行时使用）
 
----
-
-## §4 节点内容类型识别规则
-
-### 4.1 实现前必须查 Figma 节点 type
-
-| Figma type | 对应实现 |
-|-----------|---------|
-| `TEXT` | 文字 children |
-| `IMAGE-SVG` / `VECTOR` / `BOOLEAN_OPERATION` | `<IconPlaceholder />`，**禁止用文字替代** |
-| `FRAME` / `INSTANCE` | React 组件或 div |
-| `RECTANGLE` / `ELLIPSE` | CSS 形状或 SVG 基本图形 |
-
-### 4.2 典型错误案例
-
-> （在此处追加每次发现的案例）
-
----
-
-## §5 布局还原规则
-
-### 5.1 容器 sizing 分类
-
-| Figma sizing | CSS 实现 |
-|-------------|---------|
-| **hug** | `width: fit-content` |
-| **fixed** | `width: Npx; height: Npx` |
-| **fill** | `flex: 1` |
-
-### 5.2 排列数量严格对齐
-
-设计稿中横向/纵向排列了 N 个元素，实现必须也是 N 个。
-
-验证公式：`N × 元素宽 + (N-1) × gap ≤ 容器可用宽度`
-
-### 5.3 元素对齐规则
-
-**Figma MCP 对齐数据返回机制**：
-
-| 元素类型 | MCP 返回字段 | 处理方式 |
-|---------|------------|---------|
-| Auto Layout 子元素 | `alignItems` / `justifyContent` / `alignSelf` | 直接映射 CSS flex 属性 |
-| 绝对定位元素 | 只有 `locationRelativeToParent: {{x, y}}` | 手动判断：x/y == (父-子)/2 → 居中意图；否则 → 真实偏移 |
-
-**居中意图判断**：若 `x == (父宽-子宽)/2` 且 `y == (父高-子高)/2`：
-
-```css
-/* 居中意图 → 禁止字面翻译坐标 */
-.element {{
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}}
-```
-
-### 5.4 典型错误案例
-
-> （在此处追加每次发现的案例）
+- [ ] 颜色值：与设计稿 token 完全一致？
+- [ ] 间距：padding/margin/gap 均与设计稿标注一致？
+- [ ] 字体：size / weight / line-height 一致？
+- [ ] 圆角：border-radius 一致？
+- [ ] 状态矩阵：default/hover/active/disabled/focus/error 均已实现？
+- [ ] 图标：尺寸/颜色/类型与设计稿一致？
+- [ ] 响应式：设计稿涉及的断点均已处理？
+- [ ] 动效：transition 时间/缓动函数与标注一致？
 
 ---
 
-## §6 组件与设计系统规则
-
-### 6.1 组件识别与下钻
-
-1. Figma Component Set → React 独立组件
-2. Component Set 所有变体 → `variant` prop（**不得遗漏**）
-3. **必须直接查 Component Set 顶层节点**，禁止从使用侧实例读取变体
-
-```
-正确路径：Figma MCP → Component Set（componentSetId）→ children → 完整变体
-错误路径：Figma MCP → 使用侧 Frame → 嵌套 Instance → 只看到部分变体
-```
-
-### 6.2 典型错误案例
-
-> （在此处追加每次发现的案例）
-
----
-
-## §7 设计走查清单（Design QA Checklist）
-
-每次实现后，按以下顺序逐项检查：
-
-### 7.1 元素层面
-- [ ] 所有图标已使用 IconPlaceholder（无法导出时），无文字替代
-- [ ] 所有 TEXT 节点内容与设计稿文案完全一致
-
-### 7.2 尺寸层面
-- [ ] 每个组件的 width / height 与 Figma 标注值相差不超过 0.5px
-- [ ] 所有 padding / gap 值与 Figma layout token 一致
-- [ ] border-radius 一致
-
-### 7.3 Border 层面
-- [ ] 有 Inside stroke 的组件：浏览器渲染尺寸 == Figma 标注尺寸
-- [ ] 含 fill 子元素的结构性 border：使用 `outline` 而非 `border`
-
-### 7.4 布局层面
-- [ ] 每行/列的元素数量与设计稿完全一致
-- [ ] 所有 sizing 类型（hug/fixed/fill）已正确对应 CSS 实现
-- [ ] **绝对定位居中元素**：已判断居中意图，使用 `inset:0 + flex` 而非 `top/left` 坐标
-
-### 7.5 组件层面
-- [ ] 所有 Component Set 变体均已实现（通过 componentSetId 逐一核对）
-- [ ] 嵌套组件已下钻到子 Component Set 独立核实
-
----
-
-## §CHANGELOG
-
-| 日期 | 版本 | 新增/修改内容 | 触发问题 |
-|------|------|------------|---------|
-| {today()} | v0.1 | 初始框架生成，by designer-vibecoding-starter | 项目初始化 |
-
----
-
-> **如何更新本文件**
->
-> 1. 发现新的典型问题 → 在对应 §CHANGELOG 追加一行
-> 2. 若问题属于已有规则的新案例 → 在对应章节末尾追加「典型错误案例」
-> 3. 若问题属于全新规则类别 → 新建 §N 章节，并在 CHANGELOG 记录
-> 4. 每条案例必须包含：错误描述 / 根因 / 修复方案 / 新增/强化的规则引用
+_来源：项目实践迭代沉淀_
 """
 
 
-def make_active_prd(project_name: str, path_mode: str) -> str:
-    flow = (
-        "Design analysis -> design contract -> PRD slices -> implementation -> design QA"
-        if path_mode == "design-driven"
-        else "Intent clarification -> PRD -> implementation slices -> validation"
-    )
-    return f"""# Active PRD
+# ──────────────────────────────────────────────────────────────────────────────
+# skills/（7 个 Skill 模板）
+# ──────────────────────────────────────────────────────────────────────────────
 
-## Project
-- {project_name}
+SKILL_DESIGN_ANALYSIS = """\
+# Skill: design-analysis
 
-## Path
-- {path_mode}
+> 分两阶段：Phase-1（前置设计分析）和 Phase-2（后置 Design QA）。
+> 两个阶段都是强制门控，不得跳过。
+>
+> **扩展规则库**（执行前必读）：`agent-context/design-role-rules.md`
 
-## Delivery flow
-- {flow}
+---
 
-## Current objective
-- Replace this section with the first real deliverable.
+## 触发条件
+
+| 场景 | 触发阶段 |
+|---|---|
+| 任务输入包含 Figma 链接或设计稿引用 | Phase-1（必须在写 Plan 前完成） |
+| 任何 UI 任务进入 DoD 检查前 | Phase-2 |
+
+---
+
+## 设计稿场景判断（Phase-1 前置）
+
+### 场景 A：大型多功能设计稿
+顶层 Frame ≥2，功能相互独立 → 向用户展示拆分方案，确认后逐一分析，拆为多个 PRD。
+
+### 场景 B：文字 PRD + 设计稿
+先读 PRD 提取功能清单，再分析设计稿，产出三类结论：
+- ✅ 一致项 → 写入 AC
+- ⚠️ 设计稿有、PRD 未提及 → 逐一询问用户
+- ❗ PRD 有、设计稿未覆盖 → 标注设计遗漏风险
+
+### 场景 C：单组件设计稿
+先查 prd-registry.md，判断归属现有 PRD 还是新建 PRD。
+
+---
+
+## Phase-1：执行步骤
+
+1. 调用 Figma MCP 拉取节点数据
+2. 提取组件层级、状态矩阵、间距、颜色、字体、交互行为
+3. 识别设计疑点（未标注的状态/不一致/非标准值）
+4. 逐一消除疑点（一次一问，等待确认）
+5. 输出设计分析包（状态矩阵 + 间距规格 + 交互行为 + 已确认疑点）
+6. 转化为 PRD UI 规格 + Acceptance Criteria
+
+每条 AC 格式：
+> AC-1: 当 [条件] 时，[行为] → [可观察结果]（含具体颜色值/像素值）
+
+---
+
+## Phase-2：Design QA 步骤
+
+1. 读 PRD AC 列表 + Phase-1 设计分析包
+2. 逐 AC 定位代码，提取实际值，与设计规格对比
+3. 输出 QA 报告（PASS / FAIL / NEEDS_CLARIFICATION）
+4. Critical 项全部 PASS → 还原通过，可进入 DoD
+
+严重度：Critical（设计意图被错误还原，阻塞发布）/ Minor（像素级偏差，记录即可）
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_REQUIREMENTS_REFINEMENT = """\
+# Skill: requirements-refinement
+
+> 对应原 `product-strategist` + `project-manager` 规划侧职责。
+> 目标：确保每个进入开发的需求满足 Definition of Ready（DoR）。
+
+---
+
+## 触发条件
+
+- 需求描述不够具体（缺 AC / 范围 / 角色）
+- 现有 PRD 缺少 Acceptance Criteria
+- 新需求与现有 PRD 有范围重叠
+
+---
+
+## Definition of Ready（DoR）
+
+进入开发前，需求必须满足：
+- [ ] User Story 格式：作为 [角色]，我想 [操作]，以便 [目的]
+- [ ] 有明确 Acceptance Criteria（每条可独立验证）
+- [ ] 范围边界清晰（有"不包含"列表）
+- [ ] 外部依赖明确（设计稿 / API / 其他 PRD）
+- [ ] 优先级已确认（P0 / P1 / P2）
+- [ ] 无未解决的需求冲突
+
+---
+
+## 执行步骤
+
+1. DoR 快速检查，标记所有未满足项
+2. 逐项补全（一次一问）：
+   - "这个功能是为了解决什么问题？"
+   - "完成后，你怎么判断它做好了？"
+   - "这个功能不包含哪些情况？"
+   - "优先级如何？"
+   - "有设计稿吗？"
+3. 输出完整 PRD（User Story + AC + Scope + 依赖 + 优先级）
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_SYSTEMATIC_DEBUGGING = """\
+# Skill: systematic-debugging
+
+> 遇到任何 bug / 测试失败 / 意外行为，必须按四阶段执行。
+> 铁律：未找到根因，禁止提 fix。已尝试 3 次 fix 仍失败，禁止继续，向用户上报。
+
+---
+
+## 触发条件
+
+- 任何 bug / 测试失败 / 意外行为
+- 代码改动后出现回归
+
+---
+
+## 四阶段流程
+
+### 阶段 1：症状记录
+- 精确描述：什么触发 / 什么现象 / 期望 vs 实际
+- 收集：错误信息 / 堆栈 / 日志
+
+### 阶段 2：根因假设
+- 列出 2-3 个可能的根因（不要只列一个）
+- 按可能性排序
+
+### 阶段 3：最小复现
+- 构造最小复现用例，隔离变量
+- 验证假设：一次只改一个变量
+
+### 阶段 4：修复 + 回归验证
+- 找到根因后提出 fix
+- 验证 fix 不引入新回归
+
+---
+
+## 铁律
+
+```
+❌ 未找到根因，禁止提 fix
+❌ 已尝试 3 次 fix 仍失败，禁止继续加 fix
+✅ 3 次 fix 失败 → 停下来质疑架构，向用户上报
+```
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_WRITING_PLANS = """\
+# Skill: writing-plans
+
+> 对应原 `architect` 角色的规划职责。
+> 中大任务在进入实现前，必须先写 Plan。
+
+---
+
+## ★ 写之前：信息写入路由检查（前置必做）
+
+**写任何文件之前，先判断内容类型，再决定写哪里。**
+
+```
+要写的内容是什么？
+│
+├── 产品交互行为规则（菜单/颜色/操作约束）
+│   → docs/product/ 对应文件
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 开发经验 / 踩坑记录
+│   → LEARNINGS.md 或 tasks/knowledge/lessons.md
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 需求 / 功能 / AC
+│   → tasks/prd/ 对应 PRD 文件
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+├── 架构 / 产品决策
+│   → project-management/decision-log.md
+│   ❌ 禁止写入 AGENTS.md 正文
+│
+└── AI 协作流程规则（agent 协议、DoD、review 流程）
+    → AGENTS.md 或 skills/ 对应 SKILL.md
+    ✅ AGENTS.md 唯一允许写正文的内容类型
+```
+
+**口诀**：去掉 AI 工具后，工程师还需要这条信息吗？需要 → 对应产品/需求文件；不需要 → AGENTS.md。
+
+---
+
+## 触发条件
+
+- 任何 3 步以上的新功能或新组件
+- 跨模块的改动
+- 涉及架构变更的任务
+
+---
+
+## Plan 必须包含的内容
+
+每个 step 必须包含：
+1. 做什么（具体操作）
+2. 怎么做（代码/命令）
+3. 如何验证（期望输出/通过标准）
+
+---
+
+## Plan 禁止出现的内容
+
+```
+❌ "TBD" / "TODO" / "后续处理"
+❌ "添加适当的错误处理"（必须说明是什么错误处理）
+❌ "参考 Task N 的写法"（必须把代码重复写出来）
+❌ "按现有逻辑处理"（必须明确说是什么逻辑）
+❌ 没有验证命令的步骤
+❌ 代码步骤没有实际代码
+```
+
+---
+
+## Spec 自检（写完 Plan 后必须执行）
+
+1. Placeholder 扫描：有无上述禁止表达？
+2. 内部一致性：各章节是否矛盾？
+3. 范围检查：是否混入了不相关功能？
+4. 歧义检查：每条需求是否只有一种解读？
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_BRAINSTORMING = """\
+# Skill: brainstorming
+
+> 用于大任务需求不清晰时的探索阶段。
+> 必须在写 Spec 之前完成。
+
+---
+
+## 触发条件
+
+- 大任务需求描述模糊，存在多种解读
+- 涉及新的产品方向，需要先探索可行性
+- 用户提出"我想做 X，但不确定怎么做"
+
+---
+
+## 执行步骤
+
+1. **现状分析**：用户现在是怎么做的？痛点在哪里？
+2. **目标澄清**：成功完成后，用户能做到什么是现在做不到的？
+3. **方案发散**：列出 2-3 种可能的实现方向，每种附优缺点
+4. **约束确认**：技术约束 / 时间约束 / 范围约束
+5. **选择 + 文档化**：用户选定方案后，输出简明的决策记录
+
+---
+
+## 产物
+
+- 决策记录（写入 `project-management/decision-log.md`）
+- 简明的需求范围（作为 requirements-refinement 的输入）
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_TWO_STAGE_REVIEW = """\
+# Skill: two-stage-review
+
+> **触发条件**：每个 task 完成后，必须顺序执行两阶段 review。两阶段都通过，才算完成。
+
+---
+
+## 执行顺序（不可调换，不可跳过）
+
+```
+Task 实现完成
+    ↓
+阶段 1：Spec 合规 Review
+    ↓ 通过
+阶段 2：代码质量 Review
+    ↓ 通过
+Task 完成 ✅
+```
+
+---
+
+## 阶段 1：Spec 合规 Review
+
+- [ ] spec 中每条需求，代码里是否有对应实现？（逐条核对）
+- [ ] 有没有实现了 spec 以外的功能？（over-engineering 也算问题）
+- [ ] 所有边界条件是否处理了？（空值、异常输入、极端情况）
+- [ ] 错误处理是否明确？
+
+**未通过 → 实现者修复 → 重新 review（不得跳过）**
+
+---
+
+## 阶段 2：代码质量 Review
+
+- [ ] 类型安全（TypeScript 严格模式无 any？）
+- [ ] 是否遵循项目架构规则？
+- [ ] 相同逻辑是否超过 2 处？（应抽取）
+- [ ] 是否有明显的回归风险？
+- [ ] 命名是否清晰？
+
+**未通过 → 修复 → 重新 review（不得跳过）**
+
+---
+
+## review 后需要补写文档时：信息写入路由
+
+| 内容类型 | 写入位置 |
+|---------|---------|
+| 产品交互行为规则 | `docs/product/` 对应文件 |
+| 开发踩坑 / 经验 | `LEARNINGS.md` 或 `tasks/knowledge/lessons.md` |
+| 需求 / AC 变更 | `tasks/prd/` 对应 PRD 文件 |
+| 架构 / 产品决策 | `project-management/decision-log.md` |
+| AI 协作规则 | `AGENTS.md` 或 `skills/` 对应 SKILL.md |
+
+**禁止把产品规则、踩坑记录、需求变更直接追加进 AGENTS.md 正文。**
+
+---
+
+_版本：v1.0_
+"""
+
+SKILL_ARCHITECTURE_CHECK = """\
+# Skill: architecture-check
+
+> 任何架构变更前必须执行。
+> 目标：在动手前发现架构问题，避免事后重构。
+
+---
+
+## 触发条件
+
+- 新增目录或模块
+- 引入新的数据流或状态管理方式
+- 改变组件间的依赖关系
+- 修改核心数据结构
+
+---
+
+## 执行步骤
+
+### 快速扫描清单
+
+- [ ] 相同逻辑是否出现在 2+ 个文件？（→ 应抽取）
+- [ ] 新功能是否引入了新"维度"？（→ 检查是否有统一入口）
+- [ ] 改动文件是否超过 500 行？（→ 应提前拆分）
+- [ ] 数据来源是否唯一（Single Source of Truth）？
+- [ ] 新模块的边界是否清晰？（职责是否单一）
+
+### 发现问题时
+
+**禁止沉默**。必须向用户说明：
+1. 当前需求会带来什么技术债
+2. 架构调整的收益
+3. 获得确认后再重构
+
+---
+
+## 架构检查后需要补写规则时：信息写入路由
+
+| 内容类型 | 写入位置 |
+|---------|---------|
+| 产品交互行为规则（颜色互斥、状态机） | `docs/product/` 对应文件 |
+| 架构决策（为什么这样设计） | `project-management/decision-log.md` |
+| 开发踩坑记录 | `LEARNINGS.md` |
+| AI 协作流程规则 | `AGENTS.md` 或 `skills/` 对应 SKILL.md |
+
+**禁止把产品规则或架构约束直接写进 AGENTS.md 正文。**
+AGENTS.md 只保留指向 `docs/product/` 的引用指针。
+
+---
+
+_版本：v1.0_
+"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# project-management/
+# ──────────────────────────────────────────────────────────────────────────────
+
+def make_prd_registry(project_name: str) -> str:
+    return f"""# PRD Registry（PRD 主控追踪）
+
+> **单一数据源**：所有 PRD 的状态、优先级、进度均在此文件追踪。
+> 每次会话启动时必读；每个任务完成后必须更新。
+
+---
+
+## 会话启动协议
+
+每次新会话，Codewiz 必须：
+
+```
+1. 读取本文件
+2. 找到 Active PRD 和当前未完成任务
+3. 告知用户：「当前 Active PRD 是 [XXX]，下一步是 [task]，确认继续？」
+4. 用户确认 → 开始执行
+```
+
+---
+
+## 任务完成更新协议
+
+```
+1. 将完成的任务标记为 ✅ done
+2. 将下一个任务标记为 🔄 in-progress
+3. 如果当前 PRD 所有任务完成 → 移入"已完成 PRD"，从队列取下一个
+4. 更新 project-management/changelog.md
+```
+
+---
+
+## Active PRD
+
+<!-- 当前正在开发的 PRD，每次只有一个 Active -->
+
+| ID | 名称 | 优先级 | 状态 | 设计稿 |
+|----|------|--------|------|--------|
+| PRD-001 | {project_name} MVP | P0 | 🔄 in-progress | 待补充 |
+
+### PRD-001 任务清单
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | 完善 PRD（填写 User Story / AC / 功能范围） | ⬜ pending |
+| 2 | 架构检查（architecture-check Skill） | ⬜ pending |
+| 3 | 编写实现 Plan（writing-plans Skill） | ⬜ pending |
+| N | Design QA（如有设计稿） | ⬜ pending |
+
+---
+
+## PRD 队列（待开发）
+
+| ID | 名称 | 优先级 | 状态 | 备注 |
+|----|------|--------|------|------|
+| — | 暂无排队需求 | — | — | 从 backlog 中提取 |
+
+---
+
+## 已完成 PRD
+
+| ID | 名称 | 完成时间 | 备注 |
+|----|------|---------|------|
+| — | 暂无 | — | — |
+
+---
+
+## Sprint 生命周期
+
+### 关闭协议
+```
+1. 确认本 Sprint 所有 PRD 任务完成
+2. 将本 Sprint 快照归档到 project-management/active-sprint.md（注明日期）
+3. 在 changelog.md 记录 Sprint 产出摘要
+```
+
+### 开启协议
+```
+1. 从 PRD 队列中选取下一批 PRD
+2. 更新 active-sprint.md（新 Sprint 目标 + PRD 清单）
+3. 将第一个 PRD 设为 Active
+```
+
+---
+
+_初始化：{today()}_
 """
 
 
 def make_active_sprint(project_name: str) -> str:
     return f"""# Active Sprint
 
-- Project: {project_name}
-- Status: in-progress
+- 项目：{project_name}
+- 状态：in-progress
+- 开始时间：{today()}
 
-## Goal
-- Initialize the collaboration system
-- Define the first deliverable
-- Produce the first executable handoff
+---
+
+## Sprint 目标
+
+- 完成项目初始化
+- 明确第一个 MVP 需求（PRD-001）
+- 产出可验证的第一个交付物
+
+---
+
+## PRD 清单
+
+| PRD | 状态 |
+|-----|------|
+| PRD-001 | 🔄 in-progress |
+
+---
 
 ## Checklist
-- [ ] Confirm scope
-- [ ] Fill active PRD
-- [ ] Fill tasks/todo.md
-- [ ] Create first handoff
-- [ ] Run verification
+
+- [ ] PRD-001 完成需求精化（requirements-refinement）
+- [ ] PRD-001 通过两阶段 review
+- [ ] changelog.md 更新
 """
 
 
 def make_backlog() -> str:
-    return """# Backlog
+    return """# Backlog（想法池）
 
-## Now
-- [ ] Define the first milestone
+> 未进入 PRD 队列的原始想法。
+> 定期 review，有价值的提升为 PRD，加入 prd-registry.md 队列。
 
-## Next
-- [ ] Expand PRD slices
-- [ ] Add verification cases
+---
 
-## Later
-- [ ] Add automation improvements
+## 待探索
+
+- [ ] （在此记录你的产品想法）
+
+## 已评估，暂不做
+
+- （无）
+
+## 已提升为 PRD
+
+- （无）
 """
 
 
@@ -660,406 +945,258 @@ def make_changelog() -> str:
     return f"""# Changelog
 
 ## {today()}
-- Project scaffold initialized from `designer-vibecoding-starter`.
+
+- 项目通过 `designer-vibecoding-starter` scaffold 初始化
+- 创建 PRD-001 占位
 """
 
 
-def make_todo(path_mode: str) -> str:
-    extra = (
-        "- [ ] Complete design analysis\n- [ ] Complete design QA"
+def make_decision_log() -> str:
+    return f"""# Decision Log（决策记录）
+
+> 记录重要的架构和产品决策，及其背景与理由。
+
+---
+
+## 格式
+
+```
+### [日期] [决策标题]
+- **背景**：为什么需要做这个决策？
+- **选项**：考虑了哪些方案？
+- **决策**：选择了哪个方案？
+- **理由**：为什么选这个？
+```
+
+---
+
+## 记录
+
+### {today()} 项目初始化
+- **背景**：项目通过 designer-vibecoding-starter 初始化
+- **决策**：使用单模型多 Agent 架构（Codewiz 主导）
+- **理由**：避免多模型协调开销，Codewiz 负责规划+编排，子 agent 执行具体 task
+"""
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# tasks/
+# ──────────────────────────────────────────────────────────────────────────────
+
+def make_prd_001(project_name: str, path_mode: str) -> str:
+    design_section = (
+        "设计稿已提供，执行 design-analysis Phase-1 后填充此区块。"
         if path_mode == "design-driven"
-        else "- [ ] Clarify initial product intent\n- [ ] Draft first PRD slice"
+        else "无（0-1 路径，后续有设计稿时补充）"
     )
-    return f"""# Todo
+    return f"""# PRD-001: {project_name} MVP
 
-## Current Plan
-- [ ] Confirm first milestone
-{extra}
-- [ ] Create handoff
-- [ ] Run verification
+> 状态：🔄 in-progress
+> 优先级：P0
+> 设计稿：{design_section}
+> 依赖：无
 
-## Review
-- Pending
+---
+
+## 1. User Story
+
+作为 [目标用户]，我想要 [核心功能]，以便 [用户价值]。
+
+<!-- 从对话中生成后填入 -->
+
+---
+
+## 2. 功能范围
+
+### 包含
+
+- [ ] （功能点 1）
+- [ ] （功能点 2）
+- [ ] （功能点 3）
+
+### 不包含（Out of Scope）
+
+- （明确排除的功能）
+
+---
+
+## 3. 设计规格
+
+{design_section}
+
+---
+
+## 4. Acceptance Criteria
+
+- AC-1: 当 [条件] 时，[行为] → [可观察结果]
+- AC-2: ...
+- AC-3: （边界/错误场景）
+
+---
+
+## 5. 实现任务拆解
+
+（由 writing-plans Skill 输出后填入）
+
+| # | 任务 | 状态 | 备注 |
+|---|------|------|------|
+| 1 | ... | ⬜ pending | - |
+
+---
+
+_版本：草稿 | 创建时间：{today()}_
+"""
+
+
+def make_vercelignore() -> str:
+    return """\
+# ============================================================
+# Vercel 部署忽略文件
+# vibecoding 项目三层架构：只有"应用代码层"进入 CDN
+# ============================================================
+
+# ── AI 协作层（AI 工具专用，不随产品交付）────────────────────
+AGENTS.md
+LEARNINGS.md
+skills/
+agent-context/
+
+# ── 需求追踪层（开发过程文档，不随产品交付）──────────────────
+tasks/
+project-management/
+
+# ── 产品规范层（工程师参考文档，不部署但保留在 git）────────────
+# docs/ 目录保留在 git（版本管理），但不进入生产服务器
+docs/
+
+# ── 开发工具 ────────────────────────────────────────────────
+scripts/
+presentations/
+tokens/
+
+# ── 说明 ─────────────────────────────────────────────────────
+# "应用代码层"（实际进入 CDN 的）：
+#   src/ public/ index.html package.json vite.config.ts 等
+# Vite 构建后只有 dist/ 被部署，以上三层均不会出现在生产环境。
+"""
+
+
+def make_dockerignore() -> str:
+    return """\
+# ============================================================
+# Docker 部署忽略文件（有后端服务时使用）
+# ============================================================
+
+# ── AI 协作层 ────────────────────────────────────────────────
+AGENTS.md
+LEARNINGS.md
+skills/
+agent-context/
+
+# ── 需求追踪层 ───────────────────────────────────────────────
+tasks/
+project-management/
+
+# ── 产品规范层（不进入容器，但保留在 git）──────────────────────
+docs/
+
+# ── 开发工具 ────────────────────────────────────────────────
+scripts/
+presentations/
+tokens/
+*.test.ts
+*.test.tsx
+
+# ── 标准排除 ─────────────────────────────────────────────────
+node_modules/
+dist/
+.env
+.env.local
+"""
+
+
+def make_docs_product_readme() -> str:
+    return """\
+# Product Specs
+
+> 产品行为规范文档目录。以下规范是工程师实现功能的权威依据，
+> 与代码库共同演进，不依赖 AI 工具即可阅读。
+
+---
+
+## 规范列表
+
+| 文件 | 内容 |
+|------|------|
+| （在此添加规范文件） | — |
+
+---
+
+## 如何添加新规范
+
+1. 在本目录新建 `<feature>-spec.md`
+2. 在本 README 的规范列表中添加索引条目
+3. 在 `AGENTS.md` 第 11 章的引用表格里加一行指向新文件
+
+---
+
+## 信息归属原则
+
+| 问题 | 放在哪里 |
+|------|---------|
+| 这条规则给 AI 工具看的吗？（如 review 流程、DoD 定义） | `AGENTS.md` / `skills/` |
+| 这条规则描述产品行为的吗？（如菜单关闭机制、颜色规则） | `docs/product/`（本目录） |
+| 需求和验收标准（AC）？ | `tasks/prd/` |
+
+**快速判断**：去掉 AI 工具后，工程师还需要这条规则吗？
+- 需要 → `docs/product/`
+- 不需要 → `AGENTS.md` / `skills/`
 """
 
 
 def make_lessons() -> str:
-    return """# Lessons
+    return """# Lessons（经验教训）
 
-- Add repeated corrections and workflow learnings here.
-- Review relevant items before starting major work.
+> 记录重复出现的问题和优化方案。
+> 每次开始重要工作前，review 相关条目。
+
+---
+
+## 格式
+
+`[日期] [类别] 教训描述`
+
+类别：`[架构]` / `[调试]` / `[需求]` / `[工作流]`
+
+---
+
+## 记录
+
+<!-- 追加教训，最新在最上面 -->
 """
 
 
-def make_handoff() -> str:
-    return json.dumps(
-        {
-            "task_id": "init-first-task",
-            "title": "Replace with your first real task",
-            "steps": [],
-            "test_commands": [],
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-def make_status() -> str:
-    return json.dumps(
-        {"status": "idle", "task_id": "", "updated_at": now_iso()},
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-def make_package_json(openclaw_enabled: bool) -> str:
-    scripts = {
-        "workflow:intent": "bash ./scripts/workflow_intent.sh",
-        "validate:handoff": "bash ./scripts/validate_handoff.sh",
-        "agent:run": "bash ./scripts/agent_run.sh",
-    }
-    if openclaw_enabled:
-        scripts["openclaw:worker"] = "bash ./scripts/openclaw_worker.sh"
-        scripts["openclaw:daemon"] = "bash ./scripts/openclaw_daemon.sh"
-    return json.dumps(
-        {"name": "designer-vibecoding-template", "private": True, "scripts": scripts},
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-WORKFLOW_INTENT_SH = """#!/usr/bin/env bash
-set -euo pipefail
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_ROOT"
-
-INTENT="${*:-}"
-if [[ -z "$INTENT" ]]; then
-  echo "Usage: bash ./scripts/workflow_intent.sh \\"中文意图\\""
-  echo "例如："
-  echo "  bash ./scripts/workflow_intent.sh \\"切换到 Claude 规划 + Codex 开发\\""
-  echo "  bash ./scripts/workflow_intent.sh \\"跟我用 Codex 协作链路\\""
-  echo "  bash ./scripts/workflow_intent.sh \\"开启 OpenClaw 后台执行\\""
-  exit 1
-fi
-
-CURRENT_WORKFLOW="$(sed -n 's/^workflow_id: //p' agent-context/current-workflow.md | head -n 1)"
-TARGET_WORKFLOW="$CURRENT_WORKFLOW"
-OPENCLAW_ACTION="no-change"
-PATH_MODE="no-change"
-TARGET_OWNER="$(sed -n 's/^owner: //p' agent-context/current-workflow.md | head -n 1)"
-TODAY="$(date +%F)"
-
-# 协作模式识别
-if [[ "$INTENT" == *"Claude"* ]] || [[ "$INTENT" == *"Claude 规划"* ]] || [[ "$INTENT" == *"旧协作"* ]]; then
-  TARGET_WORKFLOW="claude-planner-codex-builder"
-elif [[ "$INTENT" == *"Codex"* ]] || [[ "$INTENT" == *"多 agent"* ]] || [[ "$INTENT" == *"多agent"* ]] || [[ "$INTENT" == *"全流程"* ]]; then
-  TARGET_WORKFLOW="codex-fullstack-workflow"
-fi
-
-if [[ "$TARGET_WORKFLOW" == "claude-planner-codex-builder" ]]; then
-  TARGET_OWNER="claude+codex"
-else
-  TARGET_OWNER="codex"
-fi
-
-# OpenClaw 识别
-if [[ "$INTENT" == *"OpenClaw"* ]] || [[ "$INTENT" == *"后台"* ]] || [[ "$INTENT" == *"远程"* ]]; then
-  OPENCLAW_ACTION="enable"
-fi
-
-# 路径识别
-if [[ "$INTENT" == *"有设计稿"* ]] || [[ "$INTENT" == *"设计驱动"* ]] || [[ "$INTENT" == *"design-driven"* ]]; then
-  PATH_MODE="design-driven"
-elif [[ "$INTENT" == *"没有设计稿"* ]] || [[ "$INTENT" == *"从零开始"* ]] || [[ "$INTENT" == *"zero-to-one"* ]]; then
-  PATH_MODE="zero-to-one"
-fi
-
-# 如果 workflow 有变化，更新 current-workflow.md
-if [[ "$TARGET_WORKFLOW" != "$CURRENT_WORKFLOW" ]]; then
-  sed -i.bak "s/^workflow_id: .*/workflow_id: $TARGET_WORKFLOW/" agent-context/current-workflow.md
-  sed -i.bak "s/^owner: .*/owner: $TARGET_OWNER/" agent-context/current-workflow.md
-  sed -i.bak "s/^updated_at: .*/updated_at: $TODAY/" agent-context/current-workflow.md
-  rm -f agent-context/current-workflow.md.bak
-  echo "[workflow_intent] switched: $CURRENT_WORKFLOW -> $TARGET_WORKFLOW"
-fi
-
-cat <<EOF
-{
-  "intent": "$INTENT",
-  "workflow": "$TARGET_WORKFLOW",
-  "workflow_changed": $([ "$TARGET_WORKFLOW" != "$CURRENT_WORKFLOW" ] && echo "true" || echo "false"),
-  "openclaw_action": "$OPENCLAW_ACTION",
-  "path_mode": "$PATH_MODE"
-}
-EOF
-"""
-
-
-VALIDATE_HANDOFF_SH = """#!/usr/bin/env bash
-set -euo pipefail
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_ROOT"
-
-FILE="${1:-.agent/handoff.json}"
-jq -e '.task_id and .title' "$FILE" >/dev/null
-echo "handoff ok"
-"""
-
-
-AGENT_RUN_SH = """#!/usr/bin/env bash
-set -euo pipefail
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_ROOT"
-
-TASK_ID="$(jq -r '.task_id // "unknown"' .agent/handoff.json)"
-echo "{\\"status\\":\\"running\\",\\"task_id\\":\\"$TASK_ID\\"}" > .agent/status.json
-
-# -------------------------------------------------------
-# 配置执行命令
-# 将下面的 CONFIGURED=false 改为 CONFIGURED=true，
-# 并在 run_task() 中填写实际执行命令，例如：
-#   codex run --task "$TASK_ID"
-#   claude --task "$TASK_ID"
-# -------------------------------------------------------
-CONFIGURED=false
-
-run_task() {
-  # TODO: 替换为实际执行命令
-  echo "[agent_run] no command configured"
-  return 1
-}
-
-if [[ "$CONFIGURED" == "true" ]]; then
-  if run_task; then
-    echo "{\\"status\\":\\"done\\",\\"task_id\\":\\"$TASK_ID\\"}" > .agent/status.json
-    echo "[agent_run] completed: $TASK_ID"
-  else
-    echo "{\\"status\\":\\"failed\\",\\"task_id\\":\\"$TASK_ID\\"}" > .agent/status.json
-    echo "[agent_run] failed: $TASK_ID"
-    exit 1
-  fi
-else
-  echo "{\\"status\\":\\"pending-config\\",\\"task_id\\":\\"$TASK_ID\\",\\"error\\":\\"CONFIGURED=false. Edit scripts/agent_run.sh to add your execution command.\\"}" > .agent/status.json
-  echo "[agent_run] not configured — set CONFIGURED=true and fill run_task() first."
-  exit 1
-fi
-"""
-
-
-OPENCLAW_WORKER_SH = """#!/usr/bin/env bash
-# OpenClaw Worker — 拉取最新 handoff，执行任务，推回状态
-#
-# 前置要求（首次使用前必须配置）：
-#   1. git init 并推送到 GitHub：
-#        git init && git remote add origin <your-repo-url>
-#        git push -u origin main
-#   2. 确保 jq 已安装：
-#        brew install jq   # macOS
-#        apt install jq    # Ubuntu/Debian
-#   3. 配置好 Git 凭据（HTTPS token 或 SSH key），保证 push/pull 不需要交互输入。
-#   4. 将实际执行命令填入 scripts/agent_run.sh 并将 CONFIGURED 改为 true。
-#
-# 可选环境变量（运行时覆盖）：
-#   OPENCLAW_REMOTE       远端名称，默认 origin
-#   OPENCLAW_BRANCH       分支名称，默认当前分支
-#   OPENCLAW_AUTO_PUSH    执行后自动推回，默认 true
-#   OPENCLAW_ALLOW_DIRTY  允许工作区有未提交变更，默认 false
-#   OPENCLAW_DRY_RUN      演练模式（不执行、不推送），默认 false
-
-set -euo pipefail
-
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-cd "$REPO_ROOT"
-
-HANDOFF_FILE=".agent/handoff.json"
-STATUS_FILE=".agent/status.json"
-STATE_FILE=".agent/worker-state.json"
-
-OPENCLAW_REMOTE="${OPENCLAW_REMOTE:-origin}"
-OPENCLAW_BRANCH="${OPENCLAW_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
-OPENCLAW_AUTO_PUSH="${OPENCLAW_AUTO_PUSH:-true}"
-OPENCLAW_ALLOW_DIRTY="${OPENCLAW_ALLOW_DIRTY:-false}"
-OPENCLAW_DRY_RUN="${OPENCLAW_DRY_RUN:-false}"
-
-# ── 依赖检查 ──────────────────────────────────────────────────────────────
-require_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "❌ 缺少命令: $1 — 请先安装后再运行 OpenClaw"
-    exit 1
-  fi
-}
-require_cmd git
-require_cmd jq
-
-# ── git 仓库检查 ────────────────────────────────────────────────────────
-if ! git rev-parse --git-dir >/dev/null 2>&1; then
-  echo "❌ 当前目录不是 git 仓库。请先运行："
-  echo "     git init && git remote add origin <your-repo-url>"
-  echo "     git add -A && git commit -m 'init' && git push -u origin main"
-  exit 1
-fi
-
-if ! git remote get-url "$OPENCLAW_REMOTE" >/dev/null 2>&1; then
-  echo "❌ 远端 '$OPENCLAW_REMOTE' 不存在。请先配置："
-  echo "     git remote add $OPENCLAW_REMOTE <your-repo-url>"
-  exit 1
-fi
-
-# ── 工作区洁净检查 ──────────────────────────────────────────────────────
-if [[ "$OPENCLAW_ALLOW_DIRTY" != "true" ]]; then
-  if [[ -n "$(git status --porcelain)" ]]; then
-    echo "❌ 工作区有未提交变更，请先 commit/stash，或设置 OPENCLAW_ALLOW_DIRTY=true"
-    exit 1
-  fi
-fi
-
-echo "== OpenClaw Worker =="
-echo "repo:       $REPO_ROOT"
-echo "remote:     $OPENCLAW_REMOTE"
-echo "branch:     $OPENCLAW_BRANCH"
-echo "auto_push:  $OPENCLAW_AUTO_PUSH"
-echo "dry_run:    $OPENCLAW_DRY_RUN"
-echo
-
-# ── 拉取最新 handoff ────────────────────────────────────────────────────
-if [[ "$OPENCLAW_DRY_RUN" != "true" ]]; then
-  git fetch "$OPENCLAW_REMOTE" "$OPENCLAW_BRANCH"
-  git pull --rebase "$OPENCLAW_REMOTE" "$OPENCLAW_BRANCH"
-fi
-
-# ── 校验 handoff ────────────────────────────────────────────────────────
-if [[ ! -f "$HANDOFF_FILE" ]]; then
-  echo "❌ 找不到 $HANDOFF_FILE — 请先填写任务后再运行 worker"
-  exit 1
-fi
-
-if [[ "$OPENCLAW_DRY_RUN" != "true" ]]; then
-  bash ./scripts/validate_handoff.sh >/dev/null
-fi
-
-task_id="$(jq -r '.task_id // empty' "$HANDOFF_FILE")"
-if [[ -z "$task_id" ]]; then
-  echo "❌ handoff 中 task_id 为空，请检查 $HANDOFF_FILE"
-  exit 1
-fi
-
-# ── 去重检查（已完成任务不重复执行）───────────────────────────────────────
-last_task_id=""
-[[ -f "$STATE_FILE" ]] && last_task_id="$(jq -r '.last_task_id // empty' "$STATE_FILE" 2>/dev/null || true)"
-
-status_value=""
-status_task_id=""
-if [[ -f "$STATUS_FILE" ]]; then
-  status_task_id="$(jq -r '.task_id // empty' "$STATUS_FILE" 2>/dev/null || true)"
-  status_value="$(jq -r '.status // empty' "$STATUS_FILE" 2>/dev/null || true)"
-fi
-
-if [[ "$task_id" == "$last_task_id" && "$status_task_id" == "$task_id" && "$status_value" == "done" ]]; then
-  echo "ℹ️  无新任务（已完成）：$task_id"
-  exit 0
-fi
-
-# ── 执行任务 ────────────────────────────────────────────────────────────
-echo "▶ 执行任务：$task_id"
-if [[ "$OPENCLAW_DRY_RUN" == "true" ]]; then
-  echo "DRY RUN：跳过 scripts/agent_run.sh"
-else
-  bash ./scripts/agent_run.sh
-fi
-
-executed_at="$(date -Iseconds 2>/dev/null || date +%Y-%m-%dT%H:%M:%S)"
-cat > "$STATE_FILE" <<EOF
-{
-  "last_task_id": "$task_id",
-  "last_executed_at": "$executed_at"
-}
-EOF
-
-# ── 推回状态 ────────────────────────────────────────────────────────────
-if [[ "$OPENCLAW_DRY_RUN" == "true" ]]; then
-  echo "DRY RUN：跳过 git push"
-  exit 0
-fi
-
-if [[ "$OPENCLAW_AUTO_PUSH" == "true" ]]; then
-  git add -A
-  if [[ -n "$(git status --porcelain)" ]]; then
-    git commit -m "chore(agent): complete $task_id at $executed_at"
-    git push "$OPENCLAW_REMOTE" "$OPENCLAW_BRANCH"
-    echo "✅ 已推送任务结果：$task_id"
-  else
-    echo "ℹ️  无文件变更，跳过 push"
-  fi
-else
-  echo "ℹ️  auto push 已禁用（OPENCLAW_AUTO_PUSH=false）"
-fi
-"""
-
-
-OPENCLAW_DAEMON_SH = """#!/usr/bin/env bash
-# OpenClaw Daemon — 持续轮询执行 worker
-#
-# 使用方式：
-#   bash ./scripts/openclaw_daemon.sh
-#   OPENCLAW_POLL_SECONDS=60 bash ./scripts/openclaw_daemon.sh   # 每 60 秒轮询
-#   OPENCLAW_MAX_ROUNDS=3 bash ./scripts/openclaw_daemon.sh      # 最多跑 3 轮
-#   OPENCLAW_DRY_RUN=true bash ./scripts/openclaw_daemon.sh      # 演练模式
-
-set -euo pipefail
-
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-cd "$REPO_ROOT"
-
-INTERVAL_SECONDS="${OPENCLAW_POLL_SECONDS:-30}"
-MAX_ROUNDS="${OPENCLAW_MAX_ROUNDS:-0}"  # 0 表示无限循环
-round=0
-
-echo "== OpenClaw Daemon =="
-echo "repo:          $REPO_ROOT"
-echo "poll interval: ${INTERVAL_SECONDS}s"
-if [[ "$MAX_ROUNDS" == "0" ]]; then
-  echo "max rounds:    infinite"
-else
-  echo "max rounds:    $MAX_ROUNDS"
-fi
-echo
-
-while true; do
-  round=$((round + 1))
-  echo "---- round $round @ $(date '+%Y-%m-%d %H:%M:%S') ----"
-  if bash ./scripts/openclaw_worker.sh; then
-    echo "worker done"
-  else
-    echo "worker failed (continuing daemon loop)"
-  fi
-  echo
-
-  if [[ "$MAX_ROUNDS" != "0" && "$round" -ge "$MAX_ROUNDS" ]]; then
-    echo "daemon finished: reached max rounds $MAX_ROUNDS"
-    exit 0
-  fi
-
-  sleep "$INTERVAL_SECONDS"
-done
-"""
-
+# ──────────────────────────────────────────────────────────────────────────────
+# main
+# ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--target", required=True)
-    parser.add_argument("--project-name", required=True)
-    parser.add_argument("--path-mode", choices=["zero-to-one", "design-driven"], required=True)
-    parser.add_argument(
-        "--workflow",
-        choices=["claude-planner-codex-builder", "codex-fullstack-workflow"],
-        required=True,
+    parser = argparse.ArgumentParser(
+        description="designer-vibecoding-starter v3.0 — 单模型多 Agent 项目脚手架"
     )
-    parser.add_argument("--openclaw", action="store_true")
-    parser.add_argument("--merge", action="store_true", help="Allow scaffolding into a non-empty directory")
+    parser.add_argument("--target", required=True, help="目标目录路径")
+    parser.add_argument("--project-name", required=True, help="项目名称（中英文均可）")
+    parser.add_argument(
+        "--path-mode",
+        choices=["zero-to-one", "design-driven"],
+        required=True,
+        help="交付路径：zero-to-one（0-1 追问）或 design-driven（设计驱动）",
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="允许向非空目录写入（不会删除已有文件）",
+    )
     args = parser.parse_args()
 
     root = Path(args.target).expanduser().resolve()
@@ -1067,114 +1204,106 @@ def main() -> None:
     if root.exists() and any(root.iterdir()):
         if not args.merge:
             print(
-                f"[error] Target directory already exists and is not empty: {root}\n"
-                f"        Use --merge to scaffold into an existing directory, or choose a different target."
+                f"[error] 目标目录不为空：{root}\n"
+                f"        使用 --merge 向已有目录写入，或选择新目录。"
             )
             raise SystemExit(1)
 
     root.mkdir(parents=True, exist_ok=True)
 
+    # ── 顶层治理文件 ────────────────────────────────────────────────────────
     write(root / "AGENTS.md", make_agents_md(args.project_name))
-    write(root / "agent-context/current-workflow.md", make_current_workflow(args.workflow))
-    write(root / "agent-context/default-context.md", make_default_context(args.path_mode, args.openclaw))
+    write(root / "LEARNINGS.md", make_learnings_md())
 
-    write(root / "ai-workflows/claude-planner-codex-builder/workflow.md", make_workflow_doc("Claude Planner + Codex Builder", "Claude manages planning/context, Codex handles execution."))
-    write(root / "ai-workflows/claude-planner-codex-builder/agent-roles.md", make_agent_roles())
-    write(root / "ai-workflows/codex-fullstack-workflow/workflow.md", make_workflow_doc("Codex Fullstack Workflow", "Codex handles planning, build, test, and review by default."))
-    write(root / "ai-workflows/codex-fullstack-workflow/agent-roles.md", make_agent_roles())
-    write(root / "ai-workflows/shared/handoff-template.md", "# Handoff Template\n\n- Goal\n- Constraints\n- Steps\n- Test commands\n")
-    write(root / "ai-workflows/shared/review-template.md", "# Review Template\n\n- Findings\n- Risks\n- Follow-ups\n")
-    write(root / "ai-workflows/shared/test-plan-template.md", "# Test Plan Template\n\n- Happy path\n- Edge cases\n- Regression checks\n")
-
-    write(root / "docs/project-entry/workflow-selector.md", make_workflow_selector())
-    write(root / "docs/workflows/collaboration-workflows-overview.md", make_collab_overview(args.path_mode, args.openclaw))
-    write(root / "docs/product/active-prd.md", make_active_prd(args.project_name, args.path_mode))
-    write(root / "docs/design/figma-source.md", make_design_file("Figma Source", args.path_mode == "design-driven", "Add the design source URL or selection details here."))
-    write(root / "docs/design/design-analysis.md", make_design_file("Design Analysis", args.path_mode == "design-driven", "Translate layout, components, tokens, and interaction states here."))
-    write(root / "docs/design/design-contract.md", make_design_file("Design Contract", args.path_mode == "design-driven", "List component mapping, token constraints, and acceptance rules here."))
-    write(root / "docs/design/design-qa.md", make_design_file("Design QA", args.path_mode == "design-driven", "Record final design comparison and issues here."))
-
+    # ── agent-context/ ────────────────────────────────────────────────────
+    write(root / "agent-context/current-workflow.md", make_current_workflow(args.path_mode))
     if args.path_mode == "design-driven":
-        write(root / "agent-context/design-role-rules.md", make_design_role_rules(today()))
-        write(root / "docs/design/figma-mcp-setup.md", make_figma_mcp_setup())
+        write(root / "agent-context/design-role-rules.md", make_design_role_rules())
 
+    # ── skills/（7 个 Skill）──────────────────────────────────────────────
+    write(root / "skills/design-analysis/SKILL.md", SKILL_DESIGN_ANALYSIS)
+    write(root / "skills/requirements-refinement/SKILL.md", SKILL_REQUIREMENTS_REFINEMENT)
+    write(root / "skills/systematic-debugging/SKILL.md", SKILL_SYSTEMATIC_DEBUGGING)
+    write(root / "skills/writing-plans/SKILL.md", SKILL_WRITING_PLANS)
+    write(root / "skills/brainstorming/SKILL.md", SKILL_BRAINSTORMING)
+    write(root / "skills/two-stage-review/SKILL.md", SKILL_TWO_STAGE_REVIEW)
+    write(root / "skills/architecture-check/SKILL.md", SKILL_ARCHITECTURE_CHECK)
+
+    # ── project-management/ ───────────────────────────────────────────────
+    write(root / "project-management/prd-registry.md", make_prd_registry(args.project_name))
     write(root / "project-management/active-sprint.md", make_active_sprint(args.project_name))
     write(root / "project-management/backlog.md", make_backlog())
     write(root / "project-management/changelog.md", make_changelog())
+    write(root / "project-management/decision-log.md", make_decision_log())
 
-    write(root / "tasks/todo.md", make_todo(args.path_mode))
-    write(root / "tasks/lessons.md", make_lessons())
-    write(root / ".agent/handoff.json", make_handoff())
-    write(root / ".agent/status.json", make_status())
-    (root / ".agent/logs").mkdir(parents=True, exist_ok=True)
+    # ── docs/product/ ─────────────────────────────────────────────────────
+    write(root / "docs/product/README.md", make_docs_product_readme())
 
-    write(root / "package.json", make_package_json(args.openclaw))
-    write(root / "scripts/workflow_intent.sh", WORKFLOW_INTENT_SH)
-    write(root / "scripts/validate_handoff.sh", VALIDATE_HANDOFF_SH)
-    write(root / "scripts/agent_run.sh", AGENT_RUN_SH)
-    if args.openclaw:
-      write(root / "scripts/openclaw_worker.sh", OPENCLAW_WORKER_SH)
-      write(root / "scripts/openclaw_daemon.sh", OPENCLAW_DAEMON_SH)
+    # ── 部署忽略文件 ───────────────────────────────────────────────────────
+    write(root / ".vercelignore", make_vercelignore())
+    write(root / ".dockerignore", make_dockerignore())
 
-    for script in root.glob("scripts/*.sh"):
-        script.chmod(0o755)
+    # ── tasks/ ────────────────────────────────────────────────────────────
+    write(root / "tasks/prd/PRD-001-mvp.md", make_prd_001(args.project_name, args.path_mode))
+    write(root / "tasks/knowledge/lessons.md", make_lessons())
 
+    # ── 输出结果 ──────────────────────────────────────────────────────────
     result = {
         "target": str(root),
         "project_name": args.project_name,
         "path_mode": args.path_mode,
-        "workflow": args.workflow,
-        "openclaw": args.openclaw,
         "status": "ok",
+        "generated": {
+            "governance": ["AGENTS.md", "LEARNINGS.md"],
+            "agent_context": (
+                ["current-workflow.md", "design-role-rules.md"]
+                if args.path_mode == "design-driven"
+                else ["current-workflow.md"]
+            ),
+            "skills": [
+                "design-analysis",
+                "requirements-refinement",
+                "systematic-debugging",
+                "writing-plans",
+                "brainstorming",
+                "two-stage-review",
+                "architecture-check",
+            ],
+            "project_management": [
+                "prd-registry.md",
+                "active-sprint.md",
+                "backlog.md",
+                "changelog.md",
+                "decision-log.md",
+            ],
+            "tasks": ["prd/PRD-001-mvp.md", "knowledge/lessons.md"],
+            "docs": ["product/README.md"],
+            "deploy_config": [".vercelignore", ".dockerignore"],
+        },
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
-    # ── OpenClaw 启用时输出 git 配置清单 ────────────────────────────────────
-    if args.openclaw:
-        print()
-        print("=" * 60)
-        print("  OpenClaw 已启用 — 请完成以下 Git 配置后再运行 worker")
-        print("=" * 60)
-        print()
-        print("【步骤 1】初始化 git 仓库并推送到 GitHub")
-        print(f"  cd {root}")
-        print("  git init")
-        print("  git remote add origin <your-github-repo-url>")
-        print("  git add -A")
-        print("  git commit -m 'init: designer-vibecoding-starter scaffold'")
-        print("  git push -u origin main")
-        print()
-        print("【步骤 2】确保 jq 已安装")
-        print("  macOS : brew install jq")
-        print("  Ubuntu: sudo apt install jq")
-        print()
-        print("【步骤 3】配置 Git 凭据（选其一）")
-        print("  SSH  : ssh-keygen -t ed25519 && 将公钥添加到 GitHub Settings > SSH keys")
-        print("  HTTPS: 使用 GitHub Personal Access Token，运行：")
-        print("           git config credential.helper store")
-        print("         首次 push 时输入 token 后会自动缓存")
-        print()
-        print("【步骤 4】填写执行命令")
-        print(f"  编辑 {root}/scripts/agent_run.sh")
-        print("  将 CONFIGURED=false 改为 CONFIGURED=true")
-        print("  在 run_task() 中填入实际执行命令（如 codex run）")
-        print()
-        print("【步骤 5】演练验证（不会真正执行或推送）")
-        print("  OPENCLAW_DRY_RUN=true npm run openclaw:worker")
-        print()
-        print("【步骤 6】正式启动")
-        print("  npm run openclaw:worker   # 手动单次执行")
-        print("  npm run openclaw:daemon   # 后台持续轮询（Ctrl+C 停止）")
-        print()
-        print("  可选环境变量：")
-        print("    OPENCLAW_REMOTE=origin        # 远端名称")
-        print("    OPENCLAW_BRANCH=main          # 目标分支")
-        print("    OPENCLAW_POLL_SECONDS=30      # 轮询间隔（秒）")
-        print("    OPENCLAW_AUTO_PUSH=true       # 执行后自动推回结果")
-        print("    OPENCLAW_ALLOW_DIRTY=false    # 是否允许脏工作区")
-        print()
-        print("  完成配置后，通过 GitHub 写入新的 handoff.json 即可远程触发执行。")
-        print()
+    # ── 启动引导 ──────────────────────────────────────────────────────────
+    print()
+    print("=" * 60)
+    print(f"  项目已初始化：{args.project_name}")
+    print("=" * 60)
+    print()
+    print("下一步：在 Codewiz 中打开此项目目录，开始对话。")
+    print()
+    if args.path_mode == "zero-to-one":
+        print("【0-1 路径】Codewiz 将逐步追问（最多 6 个问题）来生成 PRD-001。")
+        print("  问完后输出 PRD 草稿，确认后进入实现阶段。")
+    else:
+        print("【设计驱动路径】提供 Figma 链接，Codewiz 将触发 design-analysis Phase-1。")
+        print("  分析完成后生成 PRD-001 的设计规格区块。")
+    print()
+    print("会话启动时，Codewiz 会自动读取：")
+    print("  1. AGENTS.md")
+    print("  2. agent-context/current-workflow.md")
+    print("  3. project-management/prd-registry.md")
+    print("  4. LEARNINGS.md")
+    print()
 
 
 if __name__ == "__main__":
