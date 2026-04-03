@@ -149,8 +149,9 @@ Constitution 生成完成后（或跳过后）→ 生成 PRD 草稿 → 用户�
 | `AGENTS.md` | AI 协作规则总入口（只放 AI 工具读取的规则） |
 | `LEARNINGS.md` | 经验教训（空模板） |
 | `agent-context/current-workflow.md` | 单模型多 Agent 启动协议 |
+| `agent-context/design-role-rules.md` | Figma→CSS 详细还原规则库（411 行实战沉淀）— 全路径必生成 |
 | `skills/design-analysis/SKILL.md` | 设计分析 Skill |
-| `skills/style-foundation/SKILL.md` | 风格基石 Skill（参考图→风格宪法） |
+| `skills/style-foundation/SKILL.md` | 风格基石 Skill（参考图→风格宪法）— 全路径必生成 |
 | `skills/requirements-refinement/SKILL.md` | 需求精化 Skill |
 | `skills/systematic-debugging/SKILL.md` | Debug 四阶段 Skill |
 | `skills/writing-plans/SKILL.md` | Plan 写作规范 Skill |
@@ -175,7 +176,7 @@ Constitution 生成完成后（或跳过后）→ 生成 PRD 草稿 → 用户�
 | 文件 | 说明 |
 |------|------|
 | `docs/product/README.md` | 产品规范目录入口（工程师实现依据） |
-| `docs/style-constitution.md` | 风格宪法（由 style-foundation Skill 生成，仅 0-1 路径有参考图时） |
+| `docs/style-constitution.md` | 风格宪法（由 style-foundation Skill 在有参考图/文字描述时生成；0-1 路径提供参考图，设计驱动路径也可触发） |
 
 **部署配置**
 
@@ -183,12 +184,6 @@ Constitution 生成完成后（或跳过后）→ 生成 PRD 草稿 → 用户�
 |------|------|
 | `.vercelignore` | Vercel 部署忽略（排除 AI 协作层 + 需求追踪层） |
 | `.dockerignore` | Docker 部署忽略（有后端服务时使用） |
-
-### 仅 design-driven 路径额外生成
-
-| 文件 | 说明 |
-|------|------|
-| `agent-context/design-role-rules.md` | Figma→CSS 详细还原规则库（411 行实战沉淀） |
 
 ### 不再生成（已废弃）
 
@@ -256,6 +251,8 @@ Constitution 生成完成后（或跳过后）→ 生成 PRD 草稿 → 用户�
 
 ## 路径分支行为对比
 
+> `design-role-rules.md` 和 `skills/style-foundation/SKILL.md` 全路径必生成，不受启动路径影响。
+
 | 特性 | 0-1 路径（无参考图） | 0-1 路径（有参考图） | 设计驱动路径 |
 |------|---------|---------|------------|
 | 启动问题数 | 6 个（逐步） | 6 个 + style-foundation 追问 | 1 个（Figma 链接） |
@@ -264,8 +261,9 @@ Constitution 生成完成后（或跳过后）→ 生成 PRD 草稿 → 用户�
 | PRD 设计规格区块 | 空（后续可补） | 风格宪法引用 | 由 Figma 数据填充 |
 | 设计 Token 来源 | 硬编码基础值 | Constitution Token 草案 | 设计分析包提取 |
 | 后续 QA 阶段 | two-stage-review | two-stage-review + 风格守护 | two-stage-review + design-analysis Phase-2 |
-| style-constitution.md | 不生成 | 生成 | 不生成（有设计稿） |
-| design-role-rules.md | 不生成 | 不生成 | 生成 |
+| style-constitution.md | 按需生成（有参考图时触发） | 生成 | 按需生成（可与 design-analysis 并行触发） |
+| design-role-rules.md | **全路径生成** ✅ | **全路径生成** ✅ | **全路径生成** ✅ |
+| skills/style-foundation/ | **全路径生成** ✅ | **全路径生成** ✅ | **全路径生成** ✅ |
 | 适合场景 | 快速验证、无设计资源 | 有审美方向、想要高质量 UI | 设计稿还原、UI 精度要求高 |
 
 ---

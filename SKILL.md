@@ -285,6 +285,16 @@ python3 skills/designer-vibecoding-starter/scripts/init_designer_vibecoding_proj
 
 生成治理结构（详见 `references/template-map.md`），完成后直接进入 Phase 2B，不停下来等用户。
 
+> **📌 全量 scaffold 规则（v3.2 起）**：
+>
+> 无论用户选择 0-1 路径还是设计驱动路径，以下文件**必须全量生成**，不受路径条件限制：
+> - `agent-context/design-role-rules.md` — Figma→CSS 还原规则库，即使当前无设计稿，后续大概率会补
+> - `skills/style-foundation/SKILL.md` — 风格基石 Skill，随时可触发，不依赖启动时有无参考图
+>
+> **理由**：0-1 路径初期通常无设计稿，但后续迭代中大概率会引入 Figma 设计稿。
+> 若 scaffold 阶段漏掉这两个文件，后续补文件成本高且容易遗漏。
+> 全量生成成本低（两个文件），收益高（全程备用）。
+
 > **⚠️ 信息归属提醒（生成后向用户说明）**：
 >
 > 脚手架生成了两类文件，用途完全不同：

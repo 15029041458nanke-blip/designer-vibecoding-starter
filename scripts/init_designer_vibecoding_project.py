@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 init_designer_vibecoding_project.py
-单模型多 Agent 项目脚手架初始化脚本（v3.0）
+单模型多 Agent 项目脚手架初始化脚本（v3.2）
 
 用法：
     python init_designer_vibecoding_project.py \
@@ -10,11 +10,19 @@ init_designer_vibecoding_project.py
         --path-mode zero-to-one        # 或 design-driven
         [--merge]                      # 允许向非空目录写入
 
+变更（v3.2）：
+    - agent-context/design-role-rules.md 改为全路径生成（不再仅限 design-driven）
+    - skills/style-foundation/SKILL.md 改为全路径生成（不再按路径条件分流）
+    - 理由：0-1 路径后续大概率会引入设计稿，提前 scaffold 降低补文件成本
+
+变更（v3.1）：
+    - style-foundation Skill 集成（0-1 路径参考图分流）
+    - Constitution 驱动 Token 生成
+
 变更（v3.0）：
     - 移除 --workflow / --openclaw 参数（不再支持 Codex/OpenClaw 架构）
     - 新增 skills/ 目录，内联 7 个 SKILL.md 文件
     - 新增 project-management/prd-registry.md（PRD 主控追踪）
-    - 新增 agent-context/design-role-rules.md（仅 design-driven 路径）
     - 移除 .agent/ / ai-workflows/ / openclaw 相关脚本生成
     - AGENTS.md 更新为 v2.1 单模型多 Agent 风格
 """
@@ -38,6 +46,40 @@ def write(path: Path, content: str) -> None:
 
 def today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def _copy_style_foundation(root: Path) -> None:
+    """
+    从 skill 安装目录复制 style-foundation/SKILL.md 到目标项目。
+    v3.2：全路径生成，不再依赖 path-mode 条件。
+
+    查找顺序：
+    1. 脚本同级的 ../skills/style-foundation/SKILL.md（开发目录结构）
+    2. ~/.config/codewiz/skills/designer-vibecoding-starter/skills/style-foundation/SKILL.md
+    """
+    import shutil
+
+    candidates = [
+        Path(__file__).parent.parent / "skills" / "style-foundation" / "SKILL.md",
+        Path.home() / ".config" / "codewiz" / "skills" / "designer-vibecoding-starter"
+        / "skills" / "style-foundation" / "SKILL.md",
+    ]
+    src = next((p for p in candidates if p.exists()), None)
+    dest = root / "skills" / "style-foundation" / "SKILL.md"
+
+    if src:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        print(f"[style-foundation] 复制自 {src}")
+    else:
+        # fallback：写一个最小占位文件，避免项目 scaffold 不完整
+        write(
+            dest,
+            "# Skill: style-foundation\n\n"
+            "> 风格基石 Skill — 请从 designer-vibecoding-starter 安装目录手动复制完整版本。\n"
+            "> 安装路径：~/.config/codewiz/skills/designer-vibecoding-starter/skills/style-foundation/SKILL.md\n",
+        )
+        print("[style-foundation] 未找到源文件，已写入占位文件，请手动补充完整版本。")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -330,7 +372,7 @@ path_mode: {path_mode}
 
 
 def make_design_role_rules() -> str:
-    """仅 design-driven 路径生成"""
+    """v3.2：全路径生成，不再限于 design-driven 路径"""
     return """# Design Role Rules
 
 > 本文件是 `skills/design-analysis/SKILL.md` 的扩展规则库。
@@ -1217,10 +1259,10 @@ def main() -> None:
 
     # ── agent-context/ ────────────────────────────────────────────────────
     write(root / "agent-context/current-workflow.md", make_current_workflow(args.path_mode))
-    if args.path_mode == "design-driven":
-        write(root / "agent-context/design-role-rules.md", make_design_role_rules())
+    # v3.2：全路径生成，不再按 path-mode 条件分流
+    write(root / "agent-context/design-role-rules.md", make_design_role_rules())
 
-    # ── skills/（7 个 Skill）──────────────────────────────────────────────
+    # ── skills/（7 个核心 Skill）─────────────────────────────────────────
     write(root / "skills/design-analysis/SKILL.md", SKILL_DESIGN_ANALYSIS)
     write(root / "skills/requirements-refinement/SKILL.md", SKILL_REQUIREMENTS_REFINEMENT)
     write(root / "skills/systematic-debugging/SKILL.md", SKILL_SYSTEMATIC_DEBUGGING)
@@ -1228,6 +1270,9 @@ def main() -> None:
     write(root / "skills/brainstorming/SKILL.md", SKILL_BRAINSTORMING)
     write(root / "skills/two-stage-review/SKILL.md", SKILL_TWO_STAGE_REVIEW)
     write(root / "skills/architecture-check/SKILL.md", SKILL_ARCHITECTURE_CHECK)
+
+    # v3.2：style-foundation 全路径生成（从 skill 安装目录复制）
+    _copy_style_foundation(root)
 
     # ── project-management/ ───────────────────────────────────────────────
     write(root / "project-management/prd-registry.md", make_prd_registry(args.project_name))
@@ -1255,13 +1300,13 @@ def main() -> None:
         "status": "ok",
         "generated": {
             "governance": ["AGENTS.md", "LEARNINGS.md"],
-            "agent_context": (
-                ["current-workflow.md", "design-role-rules.md"]
-                if args.path_mode == "design-driven"
-                else ["current-workflow.md"]
-            ),
+            "agent_context": [
+                "current-workflow.md",
+                "design-role-rules.md",  # v3.2: 全路径生成
+            ],
             "skills": [
                 "design-analysis",
+                "style-foundation",  # v3.2: 全路径生成
                 "requirements-refinement",
                 "systematic-debugging",
                 "writing-plans",
