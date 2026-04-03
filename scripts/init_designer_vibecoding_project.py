@@ -91,7 +91,14 @@ def make_agents_md(project_name: str) -> str:
 
 > 最高优先级规则文件。所有 agent、子 agent、工具调用均须遵守本文件。
 > 本文件 = 强制规则，不是建议。
-> 版本：v2.1（单模型多 Agent + PRD 驱动开发流）
+> 版本：v2.3（单模型多 Agent + PRD 驱动开发流）
+
+> ⚡ **新会话强制启动协议——收到任何消息前必须先执行，不得跳过、不得等用户提问：**
+> 1. 读 `agent-context/current-workflow.md`
+> 2. 读 `project-management/prd-registry.md`
+> 3. 读 `LEARNINGS.md`（如存在）
+> 4. 主动告知用户：「当前 Active PRD 是 [XXX]，下一步是 [task]，确认继续？」
+> 用户说「开始」时，同样触发此协议后再行动。
 
 ---
 
@@ -215,15 +222,29 @@ brainstorming → 写 spec → spec 自检 → 用户 review spec
 
 ## 8. 会话启动协议（PRD 驱动）
 
-每次新会话，必须：
+**⚠️ 强制执行，不得等待用户提问，不得跳过任何步骤。**
 
 ```
-1. 读 AGENTS.md（本文件）
-2. 读 agent-context/current-workflow.md
-3. 读 project-management/prd-registry.md
-4. 读 LEARNINGS.md（如存在）
-5. 告知用户：当前 Active PRD 是 [XXX]，下一步是 [task]，确认继续？
+Step 1  读 agent-context/current-workflow.md   → 获取当前路径和状态
+Step 2  读 project-management/prd-registry.md  → 找到 Active PRD 和未完成任务
+Step 3  读 LEARNINGS.md（如存在）              → 避免重复犯同类错误
+Step 4  主动输出启动报告（格式如下）：
 ```
+
+**启动报告格式**（每次新会话必须输出）：
+
+```
+📋 会话启动报告
+━━━━━━━━━━━━━━━━━━━━━━━━
+Active PRD：[PRD-XXX 名称]
+当前状态：[in-progress / queued]
+下一步任务：[具体 task 描述]
+相关设计稿：[有 / 无]
+━━━━━━━━━━━━━━━━━━━━━━━━
+确认继续这个任务吗？还是要调整方向？
+```
+
+**触发词**：用户说「**开始**」时，立即执行完整启动协议后再等待确认。
 
 ---
 
@@ -245,6 +266,7 @@ brainstorming → 写 spec → spec 自检 → 用户 review spec
 ```
 skills/
 ├── design-analysis/SKILL.md         # 设计分析（前置 + 后置 QA）
+├── style-foundation/SKILL.md        # 风格基石（参考图/描述 → 风格宪法）
 ├── requirements-refinement/SKILL.md # 需求精化（DoR 检查 + AC 补全）
 ├── systematic-debugging/SKILL.md    # Debug 四阶段规则
 ├── writing-plans/SKILL.md           # Plan 写作规范
@@ -301,7 +323,17 @@ skills/
 
 ---
 
-_版本：v2.2 | 初始化时间：{today()}_
+## 13. 会话启动触发词
+
+新会话时，用户只需发送：
+
+> **「开始」**
+
+Codewiz 收到「开始」后必须：先完整执行第 8 章启动协议（读 3 个文件 + 输出启动报告），再等待用户确认，不得直接进入实现。
+
+---
+
+_版本：v2.3 | 初始化时间：{today()} | 启动协议升级：v2.3_
 """
 
 
